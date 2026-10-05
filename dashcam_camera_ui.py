@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from dashcam_live import (CaptureSession, CREATE_NO_WINDOW, describe_probe, enable_live_stream, input_options,
                           inspect_stream, media_tool, read_capabilities, validate_stream)
+from dashcam_render import BackgroundRenderer
 
 
 class CameraPanel(ttk.Frame):
@@ -23,6 +24,8 @@ class CameraPanel(ttk.Frame):
         self.operation = False
         self.preview = None
         self.capture = None
+        self.renderer = None
+        self.render_enabled = tk.BooleanVar(value=False)
         self.report = None
         self.report_url = None
         self.stream = tk.StringVar()
@@ -72,6 +75,10 @@ class CameraPanel(ttk.Frame):
         self.folder_entry.grid(row=0, column=1, sticky="ew")
         self.browse = ttk.Button(output, text="Browse", command=self._browse)
         self.browse.grid(row=0, column=2, padx=(12, 0))
+        self.render_option = ttk.Checkbutton(output, text="Add music and overlays in background (uses Drives & MP4s settings)", variable=self.render_enabled)
+        self.render_option.grid(row=1, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        self.stop_render = ttk.Button(output, text="Stop rendering", command=self._stop_render, state="disabled")
+        self.stop_render.grid(row=1, column=2, padx=(12, 0), pady=(8, 0))
         ttk.Label(self, textvariable=self.state, wraplength=880).grid(row=5, column=0, sticky="ew", pady=(12, 6))
         ttk.Label(self, text="PC recording uses separate five-minute segments. Preview stops before recording.",
                   style="Muted.TLabel").grid(row=6, column=0, sticky="w")
@@ -106,7 +113,7 @@ class CameraPanel(ttk.Frame):
 
     @property
     def busy(self):
-        return self.operation or self.preview is not None or (self.capture and self.capture.active)
+        return self.operation or self.preview is not None or (self.capture and self.capture.active) or (self.renderer and self.renderer.active)
 
     def _available(self):
         if self.app.process is not None or getattr(self.app, "task_running", False) or self.busy:
@@ -211,9 +218,22 @@ class CameraPanel(ttk.Frame):
         if not self._available() or not self._verified():
             return
         try:
+            render_settings = None
+            if self.render_enabled.get():
+                music = Path(self.app.music_dir.get())
+                fade = float(self.app.crossfade.get())
+                if not music.is_dir() or fade <= 0:
+                    raise ValueError("Choose a music folder and positive crossfade in Drives & MP4s first.")
+                render_settings = (music, self.app.channel_title.get(), self.app.route_info.get(), fade)
             session = CaptureSession(self.report_url, Path(self.destination.get()), self.report)
             session.start()
             self.capture = session
+            if render_settings:
+                try:
+                    self.renderer = BackgroundRenderer(session, *render_settings)
+                    self.renderer.start()
+                except Exception:
+                    messagebox.showerror("Background rendering", "Rendering could not start. Raw PC recording continues.")
             self._controls()
         except Exception as exc:
             messagebox.showerror("Recording", str(exc))
@@ -223,6 +243,11 @@ class CameraPanel(ttk.Frame):
             self.capture.stop()
             self.state.set("Stopping recording and closing the current segment…")
             self.stop_record.configure(state="disabled")
+
+    def _stop_render(self):
+        if self.renderer:
+            self.renderer.stop()
+            self.stop_render.configure(state="disabled")
 
     def _browse(self):
         selected = filedialog.askdirectory(initialdir=self.destination.get())
@@ -237,6 +262,8 @@ class CameraPanel(ttk.Frame):
             self.record.configure(state="normal")
         self.stop_preview.configure(state="normal" if self.preview is not None else "disabled")
         self.stop_record.configure(state="normal" if self.capture and self.capture.active else "disabled")
+        self.stop_render.configure(state="normal" if self.renderer and self.renderer.active else "disabled")
+        self.render_option.configure(state="disabled" if busy else "normal")
         for entry in (self.stream_entry, self.folder_entry):
             entry.configure(state="disabled" if busy else "normal")
 
@@ -299,10 +326,26 @@ class CameraPanel(ttk.Frame):
                 self.state.set((self.capture.reason or "Recording stopped. Segments saved.") + f"\n{self.capture.directory}")
                 self.capture = None
                 self._controls()
+        if self.renderer:
+            if self.renderer.active:
+                if not (self.capture and self.capture.active):
+                    self.state.set(f"Background rendering: {self.renderer.state} · {self.renderer.completed} segment(s) ready")
+            else:
+                result = self.renderer.reason or f"Background rendering {self.renderer.state}: {self.renderer.completed} segment(s) ready."
+                if self.capture and self.capture.active:
+                    result += " Raw PC recording continues."
+                self.state.set(result)
+                self.renderer = None
+                self._controls()
         self.after(100, self._poll)
 
     def shutdown(self):
         self._stop_preview()
         if self.capture and self.capture.active:
             self.capture.stop()
+        if self.renderer and self.renderer.active:
+            self.renderer.stop()
+        if self.capture:
             self.capture.wait()
+        if self.renderer:
+            self.renderer.wait()

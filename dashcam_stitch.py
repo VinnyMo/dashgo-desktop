@@ -100,7 +100,7 @@ def probe_track(ffmpeg: str, path: Path) -> Track | None:
 
 
 def build_music_playlist(
-    ffmpeg: str, music_dir: Path, crossfade: float, temporary_dir: Path, token: str
+    ffmpeg: str, music_dir: Path, crossfade: float, temporary_dir: Path, token: str, runner=None
 ) -> tuple[Path, list[Track], float, float]:
     """Build one shuffled, crossfaded playlist. The final mux loops this exact order."""
     candidates = sorted(
@@ -154,7 +154,7 @@ def build_music_playlist(
     print(f"MUSIC SHUFFLE ({len(valid)} tracks; repeats in this order if needed):")
     for number, track in enumerate(valid, 1):
         print(f"  {number:02}. {track.artist} — {track.title} ({track.path.name})")
-    completed = subprocess.run(command)
+    completed = (runner or subprocess.run)(command)
     if completed.returncode or not playlist_path.is_file():
         raise RuntimeError(f"Music playlist creation failed with exit code {completed.returncode}")
     return playlist_path, valid, fade, playlist_duration
@@ -182,6 +182,20 @@ def video_duration(ffmpeg: str, drive: list[Clip]) -> float:
     if any(value is None for value in durations):
         raise RuntimeError("Could not determine the duration of every dashcam clip")
     return sum(value for value in durations if value is not None)
+
+
+def probe_dimensions(ffmpeg: str, path: Path) -> tuple[int, int]:
+    ffprobe = str(Path(ffmpeg).with_name("ffprobe.exe" if os.name == "nt" else "ffprobe"))
+    result = subprocess.run([ffprobe, "-v", "error", "-select_streams", "v:0", "-show_entries",
+                             "stream=width,height", "-of", "json", str(path)], capture_output=True, timeout=15)
+    try:
+        stream = json.loads(result.stdout)["streams"][0]
+        width, height = int(stream["width"]), int(stream["height"])
+        if result.returncode or width <= 0 or height <= 0:
+            raise ValueError
+        return width, height
+    except (KeyError, IndexError, ValueError):
+        raise RuntimeError("Could not determine source video dimensions") from None
 
 
 TARGET_2GB_BYTES = 1_920_000_000  # 1.92 GB (~1.788 GiB) provides a safe ~80 MB buffer under 2.00 GB
@@ -260,19 +274,29 @@ def presentation_filter(
     duration: float, label_paths: list[Path], route_path: Path | None,
     channel_path: Path, end_card: float,
     scale_height: int | None = None,
+    source_dimensions: tuple[int, int] = (3840, 2160),
+    timeline_offset: float = 0,
+    final_segment: bool = True,
 ) -> str:
     """Create branding, a music-driven EQ, timed track labels, and route text."""
     outro_start = max(duration - end_card, 0.0)
+    ratio = min(source_dimensions[0] / 3840, source_dimensions[1] / 2160)
+    def px(value: int) -> int:
+        return max(1, round(value * ratio))
+    eq_width, eq_height = px(1100), px(280)
+    opening = "between(t,0,3)" if timeline_offset == 0 else "0"
+    ending = f"gte(t,{outro_start:.3f})" if final_segment else "0"
+    fade_in = ",fade=t=in:st=0:d=3" if timeline_offset == 0 else ""
     graph: list[str] = [
         # One 4K video branch keeps peak RAM bounded. The opening fades up while blurred;
         # the end-card blur turns on for the standard 20-second closing window.
-        f"[0:v:0]setpts=PTS-STARTPTS,gblur=sigma=24:steps=1:"
-        f"enable='between(t,0,3)+gte(t,{outro_start:.3f})',fade=t=in:st=0:d=3[vblur]",
+        f"[0:v:0]setpts=PTS-STARTPTS,gblur=sigma={px(24)}:steps=1:"
+        f"enable='{opening}+{ending}'{fade_in}[vblur]",
         "[1:a:0]asplit=2[aout][visualaudio]",
-        "[visualaudio]showfreqs=s=1100x280:mode=bar:ascale=cbrt:fscale=log:"
+        f"[visualaudio]showfreqs=s={eq_width}x{eq_height}:mode=bar:ascale=cbrt:fscale=log:"
         "colors=0x00e5ff|0xff2bd6:win_size=4096:overlap=0.8,"
         "format=rgba,colorchannelmixer=aa=0.82[eq]",
-        "[vblur][eq]overlay=x=70:y=H-h-150:shortest=1[v0]",
+        f"[vblur][eq]overlay=x={px(70)}:y=H-h-{px(150)}:shortest=1[v0]",
     ]
     current = "v0"
     start = 0.0
@@ -284,9 +308,9 @@ def presentation_filter(
         output = f"v{index + 1}"
         graph.append(
             f"[{current}]drawtext={DRAW_FONT}textfile='{filter_path(label_paths[index])}':"
-            "reload=0:expansion=none:fontcolor=white:fontsize=48:"
-            "borderw=3:bordercolor=black@0.8:x=80:y=h-125:"
-            f"enable='between(mod(t,{playlist_duration:.3f}),{label_start:.3f},{label_end:.3f})'[{output}]"
+            f"reload=0:expansion=none:fontcolor=white:fontsize={px(48)}:"
+            f"borderw={px(3)}:bordercolor=black@0.8:x={px(80)}:y=h-{px(125)}:"
+            f"enable='between(mod(t{f'+{timeline_offset:.3f}' if timeline_offset else ''},{playlist_duration:.3f}),{label_start:.3f},{label_end:.3f})'[{output}]"
         )
         current = output
         start = next_start
@@ -295,16 +319,16 @@ def presentation_filter(
         graph.append(
             f"[{current}]drawtext={DRAW_FONT}textfile='{filter_path(route_path)}':"
             "reload=0:expansion=none:"
-            "fontcolor=white:fontsize=46:borderw=3:bordercolor=black@0.8:"
-            f"x=w-tw-80:y=h-th-70[{output}]"
+            f"fontcolor=white:fontsize={px(46)}:borderw={px(3)}:bordercolor=black@0.8:"
+            f"x=w-tw-{px(80)}:y=h-th-{px(70)}[{output}]"
         )
         current = output
     final_out = "vout" if scale_height is None else "vpre_scale"
     graph.append(
         f"[{current}]drawtext={DRAW_FONT}textfile='{filter_path(channel_path)}':"
-        "reload=0:expansion=none:fontcolor=white:fontsize=104:"
-        "borderw=5:bordercolor=black@0.65:x=(w-tw)/2:y=(h-th)/2:"
-        f"enable='between(t,0,3)+gte(t,{outro_start:.3f})'[{final_out}]"
+        f"reload=0:expansion=none:fontcolor=white:fontsize={px(104)}:"
+        f"borderw={px(5)}:bordercolor=black@0.65:x=(w-tw)/2:y=(h-th)/2:"
+        f"enable='{opening}+{ending}'[{final_out}]"
     )
     if scale_height is not None:
         graph.append(f"[vpre_scale]scale=-2:{scale_height}:flags=lanczos[vout]")
@@ -378,11 +402,14 @@ def stitch(
             ffmpeg, music_dir, crossfade, destination, token
         )
         duration = video_duration(ffmpeg, drive)
+        source_dimensions = probe_dimensions(ffmpeg, drive[0].path)
         encoder, default_encoder_options = choose_video_encoder(ffmpeg, video_encoder)
         if target_size == "2gb":
             scale_height, audio_kbps, encoder_options = calculate_target_encoding(
                 duration, encoder, TARGET_2GB_BYTES
             )
+            if scale_height is not None and scale_height >= source_dimensions[1]:
+                scale_height = None  # A size target must never upscale the source.
             res_label = f"scaled to {scale_height}p" if scale_height else "4K unscaled"
             print(
                 f"TARGET < 2 GB: duration {duration:.1f}s, resolution {res_label}, "
@@ -409,6 +436,7 @@ def stitch(
             tracks, actual_fade, playlist_duration, duration,
             label_paths, route_path, channel_path, min(end_card, duration),
             scale_height=scale_height,
+            source_dimensions=source_dimensions,
         )
         command = [
             ffmpeg, "-hide_banner", "-loglevel", "error", "-stats",

@@ -721,8 +721,11 @@ class DashcamGUI(tk.Tk):
         return str(value)
 
     def _close(self) -> None:
+        if self.camera_panel.operation:
+            messagebox.showinfo("Camera check running", "Wait for the current camera check to finish before closing (up to 50 seconds).")
+            return
         if self.camera_panel.busy:
-            if not messagebox.askyesno("Camera task running", "Stop preview or PC recording and close?"):
+            if not messagebox.askyesno("Camera task running", "Stop preview, PC recording and background rendering, then close?"):
                 return
             try:
                 self.camera_panel.shutdown()

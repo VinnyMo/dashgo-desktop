@@ -14,6 +14,7 @@ Windows desktop prototype for downloading NEXPOW VSQ10 dashcam recordings, organ
 | Drive grouping and MP4 rendering | Existing workflow retained; requires local music files |
 | Embedded live preview | Implemented for a measurable HTTP/HTTPS/RTSP stream; synthetic media tested |
 | Direct PC recording | Implemented as segmented Matroska stream copy; synthetic media tested |
+| Optional background music/overlay rendering | Implemented for closed segments; generated-media tests and 720p benchmark passed |
 | VSQ10 front live video | Measured 1280×720 H.264 at 25 FPS; approximately 3.15 Mbit/s in one eight-second sample |
 | Camera audio | Intentionally excluded from PC recording; mic-off firmware advertises malformed AAC |
 | Stream activation | Explicit `/app/enterrecorder` verified on the listed firmware; SD recording remained on |
@@ -57,7 +58,13 @@ There is no application session-duration cap. Available storage, camera power, P
 
 Recording stops on process failure, a 30-second lack of output growth, or less than 512 MiB free. A graceful stop is attempted before terminating only the process owned by this session. Polling/free-space reserves reduce risk but cannot guarantee against sudden storage failures. A session left marked `recording` after a crash is an interrupted session, not proof that a process is still running. Automatic reconnect and multi-hour soak testing remain planned.
 
-Capture folders are separate from the legacy MP4 editor. Combining live segments into a drive MP4 is not implemented yet. A compatible media player can open the `.mkv` files directly.
+### Optional background music and overlays
+
+Before recording, configure the music folder, crossfade, channel title and route text in **Drives & MP4s**, then enable **Add music and overlays in background** on the Camera tab. It is off by default. Raw capture and rendering use separate processes; a render failure or **Stop rendering** does not stop raw PC recording.
+
+The renderer waits for each five-minute raw segment to close, then writes a new MP4 in the capture session's `Rendered/` directory. It stays one segment behind an active capture and renders the final segment after capture stops. One shuffled, crossfaded playlist is reused throughout the session; the music offset and track labels follow cumulative source duration. The intro appears once; the final segment receives the ending. Overlay geometry follows the source resolution, without upscaling. Rendering currently uses CPU H.264 with two encoding threads and AAC music, retaining all raw files.
+
+This produces individually playable MP4 segments, not yet one assembled upload file. Exact gapless AAC joins, playlist continuity over multi-hour runs, render restart/resume and real-camera concurrent throughput need more testing. A generated eight-second 720p overlay rendered in about 1.9–2.1 seconds on the development PC; this is a short synthetic benchmark, not a sustained-performance guarantee. Rendering can fall behind, and both raw and rendered files consume disk space. If closing while rendering, allow the stop to complete. The existing drive editor remains separate; merging capture MP4s into one upload-ready video is still planned.
 
 ## SD download and drive workflow
 
@@ -101,7 +108,7 @@ $env:DASHGO_MEDIA_TESTS = '1'
 python -B -m unittest discover -s tests -v
 ```
 
-The default suite exercises URL safeguards, read-only capability detection, measurement parsing, unique recording directories, graceful stop, simulated disk exhaustion/disconnect, history retention and inventory isolation. The opt-in FFmpeg integration test generates a small synthetic H.264/AAC fixture, serves it on localhost, probes it, records multiple segments, stops and decodes the result. It never connects to the physical camera or reads user media. Temporary test files are removed after the test. Windows sandbox restrictions on Python 3.14 temporary directories can require running tests in a normal terminal.
+The default suite exercises URL safeguards, read-only capability detection, measurement parsing, unique recording directories, graceful stop, simulated disk exhaustion/disconnect, history retention and inventory isolation. The opt-in FFmpeg integration test generates a small synthetic H.264/AAC fixture, serves it on localhost, probes it, records multiple segments, stops and decodes the result. Additional generated-media tests verify embedded preview, 720p overlays, closed-segment rendering, cumulative music timeline and unchanged raw files. Tests never connect to the physical camera or read user media. Temporary test files are removed after the test. Windows sandbox restrictions on Python 3.14 temporary directories can require running tests in a normal terminal.
 
 An eight-second live front sample saved and decoded successfully while read-only status still reported SD recording on. A later integrated segmented camera test and OSD/SD-control validation were not completed; those checks remain gated. No hours-long recording test has passed. The rear camera on the test unit was reported faulty and was not selected or validated. Do not treat synthetic tests as device certification.
 
@@ -112,6 +119,7 @@ Architecture:
 | `dashcam_gui.py` | Desktop shell, transfer/drive controls, job events and local inventory |
 | `dashcam_camera_ui.py` | Explicit camera actions, embedded preview, recording state |
 | `dashcam_live.py` | Read-only capabilities, FFprobe measurements, owned FFmpeg capture lifecycle |
+| `dashcam_render.py` | Optional closed-segment background music/overlay rendering |
 | `dashcam_downloader.py` | Gateway discovery, file index, safe HTTP downloads |
 | `dashcam_history.py` | Persistent SQLite download history |
 | `dashcam_stitch.py` | Grouping, music playlist and derived MP4 rendering |
@@ -138,8 +146,8 @@ Camera HTTP is generally unencrypted on its local Wi-Fi. Do not expose camera po
 - Extend front stream measurements across longer sessions and other firmware; validate rear support on working hardware.
 - Verify safe camera controls and read-back before enabling writes.
 - Test long recording sessions, network interruptions, storage exhaustion, sleep and recovery.
-- Add an optional background renderer for completed raw segments with the existing overlay and lo-fi music workflow, scaled to 720p without upscaling. Benchmark CPU/GPU throughput, preserve playlist continuity and keep raw capture independent of rendering failures.
-- Add recording library/segment export and richer preview/capture integration. Real-time polished output is not implemented yet.
+- Validate the optional background renderer on long sessions; add queue recovery, restart/resume, multi-track continuity tests and optional GPU encoding.
+- Add recording library/segment export and richer preview/capture integration. Rendering operates on closed segments; single-file, continuously finalized upload output is not implemented yet.
 - Improve accessibility, smaller-screen layouts and configuration persistence.
 - Package a Windows app/installer later, with dependency/license review, signing and reproducible builds. No current packaging/release promise.
 

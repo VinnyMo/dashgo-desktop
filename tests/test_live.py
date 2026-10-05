@@ -85,6 +85,18 @@ class StreamTests(unittest.TestCase):
                 CaptureSession("rtsp://camera", Path(tmp), {}).start()
             process.assert_not_called()
 
+    def test_manifest_failure_after_spawn_cleans_up_process(self):
+        process = FakeProcess()
+        with tempfile.TemporaryDirectory() as tmp, patch("dashcam_live.media_tool", return_value="ffmpeg"), \
+             patch("dashcam_live.subprocess.Popen", return_value=process), \
+             patch.object(CaptureSession, "_manifest", side_effect=[None, OSError("disk full"), OSError("disk full")]):
+            session = CaptureSession("rtsp://camera", Path(tmp), {})
+            with self.assertRaises(OSError):
+                session.start()
+            self.assertIsNotNone(process.poll())
+            self.assertFalse(session.active)
+            self.assertTrue(process.stdin.closed)
+
     def test_unique_sessions_stop_and_private_manifest(self):
         with tempfile.TemporaryDirectory() as tmp, patch("dashcam_live.media_tool", return_value="ffmpeg"), \
              patch("dashcam_live.subprocess.Popen", side_effect=lambda *a, **kw: FakeProcess()) as popen:

@@ -212,14 +212,20 @@ class CaptureSession:
                 # Do not persist FFmpeg stderr: it can echo private URL parameters.
                 self.process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                                 stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
-            except Exception:
-                self.state, self.reason = "failed", "Could not start FFmpeg."
+                self.state = "recording"
                 self._manifest()
+                self._thread = threading.Thread(target=self._monitor, daemon=True)
+                self._thread.start()
+            except Exception:
+                if self.process is not None:
+                    self._finish_process()
+                    self.process.stdin.close()
+                self.state, self.reason = "failed", "Could not start recording or save its status."
+                try:
+                    self._manifest()
+                except OSError:
+                    pass
                 raise
-            self.state = "recording"
-            self._manifest()
-            self._thread = threading.Thread(target=self._monitor, daemon=True)
-            self._thread.start()
 
     def _manifest(self) -> None:
         data = {"version": 1, "state": self.state, "reason": self.reason,
