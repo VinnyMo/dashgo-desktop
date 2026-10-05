@@ -1,0 +1,9 @@
+{
+  "note": "Reference values to enter in the GUI; this file is not loaded automatically.",
+  "camera_url": "http://192.168.169.1",
+  "live_stream_url": "",
+  "transfer_folder": "Transfers",
+  "capture_folder": "Captures",
+  "music_folder": "Music",
+  "channel_title": "My Drive"
+}
