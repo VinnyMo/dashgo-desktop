@@ -3,6 +3,8 @@ Transfers/
 Captures/
 Music/
 Drives/
+Support/
+qa/
 *.ts
 *.mp4
 *.mkv

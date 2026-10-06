@@ -6,12 +6,15 @@ import tempfile
 import time
 import unittest
 import hashlib
+import array
+import math
 from types import SimpleNamespace
 from pathlib import Path
 
 from dashcam_live import media_tool
 from dashcam_stitch import Track, presentation_filter, probe_dimensions
 from dashcam_render import BackgroundRenderer
+from dashcam_finalize import CaptureFinalizer
 
 
 @unittest.skipUnless(os.environ.get("DASHGO_MEDIA_TESTS") == "1", "Set DASHGO_MEDIA_TESTS=1 for FFmpeg integration")
@@ -48,6 +51,43 @@ class OverlayIntegration(unittest.TestCase):
                     self.assertEqual(probe_dimensions(media_tool("ffmpeg"), output), (640, 360))
                     result = subprocess.run([media_tool("ffmpeg"), "-v", "error", "-i", str(output), "-f", "null", "-"], capture_output=True, timeout=10)
                     self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(before, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.glob("*.mkv")})
+                (root / "session.json").write_text(json.dumps({"state": "stopped"}))
+                segment_hashes = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in renderer.directory.glob("part_*.mp4")}
+                finalizer = CaptureFinalizer(root)
+                finalizer.start()
+                finalizer.wait(25)
+                self.assertEqual(finalizer.state, "finished", finalizer.reason)
+                self.assertEqual(probe_dimensions(media_tool("ffmpeg"), finalizer.output), (640, 360))
+                probe = subprocess.run([media_tool("ffprobe"), "-v", "error", "-count_frames", "-show_entries",
+                                        "stream=codec_type,codec_name,nb_read_frames,duration", "-of", "json", str(finalizer.output)],
+                                       capture_output=True, timeout=15, check=True)
+                streams = json.loads(probe.stdout)["streams"]
+                video = next(s for s in streams if s["codec_type"] == "video")
+                self.assertEqual(int(video["nb_read_frames"]), 200)
+                self.assertAlmostEqual(float(video["duration"]), 8, places=1)
+                self.assertTrue(any(s["codec_type"] == "audio" and s["codec_name"] == "aac" for s in streams))
+                audio = subprocess.run([media_tool("ffmpeg"), "-v", "error", "-i", str(finalizer.output),
+                                        "-map", "0:a:0", "-ac", "1", "-ar", "48000", "-f", "f32le", "pipe:1"],
+                                       capture_output=True, timeout=15, check=True)
+                samples = array.array("f", audio.stdout)
+                # The source playlist is a steady tone at the 4-second segment
+                # boundary. Check ten 20ms windows for an inserted AAC seam.
+                for tick in range(195, 205):
+                    window = samples[tick*960:(tick+1)*960]
+                    self.assertGreater(math.sqrt(sum(x*x for x in window) / len(window)), 0.02)
+                container = finalizer.output.read_bytes()
+                self.assertLess(container.find(b"moov"), container.find(b"mdat"))
+                decoded = subprocess.run([media_tool("ffmpeg"), "-v", "error", "-i", str(finalizer.output), "-f", "null", "-"], capture_output=True, timeout=15)
+                self.assertEqual(decoded.returncode, 0, decoded.stderr)
+                original_final = hashlib.sha256(finalizer.output.read_bytes()).hexdigest()
+                another = CaptureFinalizer(root)
+                another.start()
+                another.wait(25)
+                self.assertEqual(another.state, "finished", another.reason)
+                self.assertNotEqual(finalizer.output, another.output)
+                self.assertEqual(hashlib.sha256(finalizer.output.read_bytes()).hexdigest(), original_final)
+                self.assertEqual(segment_hashes, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in renderer.directory.glob("part_*.mp4")})
                 self.assertEqual(before, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.glob("*.mkv")})
             finally:
                 renderer.stop()

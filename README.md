@@ -1,106 +1,144 @@
 # DashGo Desktop
 
-Windows desktop prototype for downloading NEXPOW VSQ10 dashcam recordings, organizing drives, and developing direct-to-PC live capture. Python/Tkinter UI with FFmpeg media processing. Independent project, not affiliated with NEXPOW or DashGo.
+Windows desktop prototype for NEXPOW VSQ10 live preview, direct-to-PC capture, stored-clip transfers and video exports. Python/Tkinter with FFmpeg. Independent project, not affiliated with NEXPOW or DashGo.
 
-**Prototype:** SD transfer was verified on one VSQ10. Live capture infrastructure passes synthetic-media tests, and an eight-second front-camera live sample was saved and decoded. Control writes and long-duration capture are not yet validated. No installer or release package is available.
+**Prototype:** two separate 18-minute camera capture/render/export runs passed. Continuous hour-long, eight-hour and moving-drive reliability remain unverified. Camera settings are read-only. There is no installer, packaged release or full iOS feature parity.
 
-## Compatibility and current support
+## Compatibility
 
-| Feature | Status |
+| Feature | Evidence and limits |
 | --- | --- |
-| NEXPOW VSQ10, firmware `NEXPOW-VSQ10-20250418`, hardware `H30D-LMT-V1.1-20230810` | Device tested; other firmware/models unverified |
-| Camera identification, media URL and settings inventory | Read-only API verified on this firmware |
-| Front-camera SD file listing/download | Verified in the existing workflow; persistent local history |
-| Drive grouping and MP4 rendering | Existing workflow retained; requires local music files |
-| Embedded live preview | Implemented for a measurable HTTP/HTTPS/RTSP stream; synthetic media tested |
-| Direct PC recording | Implemented as segmented Matroska stream copy; synthetic media tested |
-| Optional background music/overlay rendering | Implemented for closed segments; generated-media tests and 720p benchmark passed |
-| VSQ10 front live video | Measured 1280×720 H.264 at 25 FPS; approximately 3.15 Mbit/s in one eight-second sample |
-| Camera audio | Intentionally excluded from PC recording; mic-off firmware advertises malformed AAC |
-| Stream activation | Explicit `/app/enterrecorder` verified on the listed firmware; SD recording remained on |
-| Sustained multi-hour recording | Not yet validated |
-| Camera setting changes, SD start/stop, front/rear switching | Not enabled; read-only settings shown |
-| Full iOS feature parity | Planned, not claimed |
+| Device | NEXPOW VSQ10, firmware `NEXPOW-VSQ10-20250418`; other firmware/models unverified |
+| Front live stream | Measured 1280x720 H.264, 25 FPS, approximately 3.15–3.43 Mbit/s in short samples |
+| Stored front recordings | 3840x2160 H.264/AAC verified separately; this does not imply 4K live video |
+| Preview and PC capture | Shared FFmpeg input during capture; five-minute Matroska segments |
+| Capture resolution | PC-side 360p / 480p / 720p limit; not a selectable camera-stream quality |
+| Camera audio | Excluded from PC capture; microphone-off firmware advertises malformed AAC |
+| Music and overlays | Optional background rendering of closed segments; manual final MP4 assembly |
+| Stored-clip transfer | Front-file listing, download, history and existing-copy preservation verified |
+| Camera controls | Read-only information/settings; verified live-server activation only |
+| Rear camera | Not tested; test unit's rear camera was reported faulty |
 
-The original SD front recordings were verified as 3840×2160 H.264 with AAC audio. **Live video was separately measured at 1280×720, H.264, 25 FPS.** The eight-second sample was 3,147,018 bytes (about 3.15 Mbit/s including container overhead), and all 201 frames decoded. This sample does not prove sustained bitrate or selectable qualities; 4K live capture is not supported by this evidence. The app measures the supplied stream and displays dimensions, codec, frame rate, audio and an approximate sampled bitrate.
+Bitrate varies with scene and conditions. The app measures dimensions, codec, frame rate, audio availability and sampled bitrate rather than assuming SD-recording resolutions apply to live video.
 
 ## Windows setup
 
-1. Install Python 3.10 or newer with Tkinter and add Python to PATH. Development checks used Python 3.14 on Windows. No pip packages are required.
-2. Install a complete [FFmpeg build](https://ffmpeg.org/download.html), including `ffmpeg.exe` and `ffprobe.exe`, and add its `bin` folder to PATH. The app also detects Gyan's WinGet FFmpeg installation. Development checks used FFmpeg 9.0. Installation is a manual user action; the app does not install tools.
-3. Clone or download this repository into a writable local folder.
-4. Run:
+1. Install Python 3.10 or newer with Tkinter. Development checks used Python 3.14. No pip packages are required.
+2. Install a complete [FFmpeg build](https://ffmpeg.org/download.html), including `ffmpeg.exe` and `ffprobe.exe`, and add its `bin` directory to PATH. The app also detects Gyan's WinGet installation. Tests used FFmpeg 9.0; it is not installed or bundled by this app.
+3. Clone/download this source into a writable folder. Open **Launch DashGo.vbs** for the console-free GUI, or run `python -B dashcam_gui.py`. The older CMD launcher can briefly show a command window.
+4. Connect Windows to the camera Wi-Fi yourself. The app does not change network interfaces, routes, firewall rules or credentials. Preserve any separate Internet connection and avoid camera traffic during important uploads.
 
-   ```powershell
-   python -B dashcam_gui.py
-   ```
+The VBS launcher uses `%LOCALAPPDATA%\Python\bin\pythonw.exe` when present, otherwise `pythonw.exe` on PATH. If Python opens the Microsoft Store, correct the installation/PATH or Windows app execution aliases.
 
-   Or double-click `Launch Dashcam Transfer.cmd`. If `python` opens the Microsoft Store, install Python or correct your Windows app execution aliases/PATH.
+## Live, Transfer and Studio
 
-Connect Windows to the dashcam's Wi-Fi yourself. This project does not change Wi-Fi, routes, firewall rules or camera credentials. If another connection supplies Internet access, preserve that setup. Avoid camera traffic during important uploads.
+### Live
 
-## Camera and live capture
+Startup attempts to discover the camera, verify the supported firmware, activate its live server and measure its advertised stream. Preview opens automatically; recording never starts automatically. If no camera is available, use **Attempt to reconnect**. Multiple detected cameras require selection.
 
-The **Camera** tab makes no automatic network connection. Enter the camera's HTTP base address and choose **Read device info**. It reads device information, the advertised live URL, and reported settings. Device settings remain read-only. No camera reset, format, erase, reboot or deletion actions are implemented.
+Preview preserves aspect ratio without a border and uses a native 1280x720 decoded image, never enlarged beyond native size. **Capture quality** changes PC capture resolution independently of preview resolution and Studio output size. Source-sized video is copied; smaller settings use software H.264 encoding. Camera resolution, microphone, camera selection and SD recording settings are unchanged.
 
-The VSQ10 advertises an RTSP root URL and separately reports TCP/port 5000. The separate port is not the observed RTSP port: live video worked on the URL's default port 554 after explicit activation. The app preserves the reported URL without rewriting its port. Choose **Enable live stream** to send the verified app-connect notification on the exact supported firmware; it asks before activation. Nothing is activated at launch. No exit/cleanup camera command is guessed; stopping closes the owned client.
+Click **Start Capture**. The button becomes **Stop Capture**, and preview continues through the same FFmpeg input as recording. Starting/stopping involves a brief stream handoff. Every session has a fresh `Capture_<date>_<time>_<id>` directory with five-minute `part_*.mkv` segments. Completed segments survive interruptions; the last segment may need inspection.
 
-When a valid stream is available:
+Connection details, measurement and storage are under **Options > Connection and storage.** The default destination is `Captures/`. **Known UI limitation:** Capture folder and Browse are disabled while automatic preview is active; editing the destination during preview needs a future fix.
 
-1. Choose **Measure stream**. This reads a five-second media sample, with bounded process timeouts. If RTSP advertises broken audio metadata, a second video-only sample is copied into a temporary local folder and probed there (up to two 20-second network stages plus a 10-second local stage). The temporary sample is removed after inspection. Bitrate is an approximate sum of packet sizes divided by sample timestamp span; FPS is the stream-reported rate. Unknown values stay unknown.
-2. Choose **Start preview** for embedded, muted playback. The display is scaled to 640×360 at 10 FPS; this is only display scaling, not the source/capture quality. Choose **Stop preview** to disconnect.
-3. Choose a **Recording folder**, then **Record to PC**. Preview stops first to avoid competing camera stream clients. Recording requires a successful measurement of that same URL.
-4. Choose **Stop recording** to flush and close the current segment. Closing the app during a camera task asks before stopping it.
+There is no duration field or application recording-duration limit. Power, storage, camera behavior and Wi-Fi still limit sessions. Keep the app open throughout capture and rendering.
 
-Each recording creates a unique `Capture_<time>_<random>` subfolder, `part_000000.mkv` segments, and a `session.json` status/measurement record. It does not overwrite existing recordings or write into the transfer/drive inventory. Video is copied without re-encoding. Camera audio and proprietary data tracks are deliberately omitted. The microphone setting is never changed; background music belongs in the later render stage. This captures the live feed delivered to the PC, not SD files. Whether this camera can sustain streaming with no SD card has not been tested.
+### Transfer
 
-There is no application session-duration cap. Available storage, camera power, PC sleep, Wi-Fi stability and device limits still apply. At the observed rate, budget roughly 1.4 GB per hour for video, allowing extra headroom. Segments target five minutes, split at source keyframes. Earlier completed segments should remain usable after an interruption; the final segment can be incomplete after power loss or forced termination. Keep the originals when attempting recovery. New sessions never append to an interrupted one.
+Use **Transfer stored clips** to copy new front-camera SD clips. Settings and cancellation are under **Options**. Progress, byte estimates and ETA stay on the same tab. Preview pauses to avoid competing camera traffic.
 
-Recording stops on process failure, a 30-second lack of output growth, or less than 512 MiB free. A graceful stop is attempted before terminating only the process owned by this session. Polling/free-space reserves reduce risk but cannot guarantee against sudden storage failures. A session left marked `recording` after a crash is an interrupted session, not proof that a process is still running. Automatic reconnect and multi-hour soak testing remain planned.
+The two newest clips are skipped by default because they may still be recording. Downloads use `.part` files and verify HTTP content length before renaming. Camera index sizes are whole-KiB estimates. Unreliable camera Range responses mean an interrupted transfer may restart at byte zero.
 
-### Optional background music and overlays
+SQLite history remains at `Transfers/.dashcam_history.sqlite3`. Deleting local sources does not erase history; re-download requires the explicit setting. Mismatched existing files are retained unless replacement is requested through the CLI. Camera files are never deleted.
 
-Before recording, configure the music folder, crossfade, channel title and route text in **Drives & MP4s**, then enable **Add music and overlays in background** on the Camera tab. It is off by default. Raw capture and rendering use separate processes; a render failure or **Stop rendering** does not stop raw PC recording.
+### Studio
 
-The renderer waits for each five-minute raw segment to close, then writes a new MP4 in the capture session's `Rendered/` directory. It stays one segment behind an active capture and renders the final segment after capture stops. One shuffled, crossfaded playlist is reused throughout the session; the music offset and track labels follow cumulative source duration. The intro appears once; the final segment receives the ending. Overlay geometry follows the source resolution, without upscaling. Rendering currently uses CPU H.264 with two encoding threads and AAC music, retaining all raw files.
+Studio lists transferred drives, live captures, raw segments, rendered segments and final MP4s. Expand a capture to inspect files. Select its parent row and use **Export selected**, or **Open selected folder**. Local deletion requires confirmation and is blocked while media jobs are active. Transferred-drive renders can replace their matching derived export; live finalization always creates a fresh directory.
 
-This produces individually playable MP4 segments, not yet one assembled upload file. Exact gapless AAC joins, playlist continuity over multi-hour runs, render restart/resume and real-camera concurrent throughput need more testing. A generated eight-second 720p overlay rendered in about 1.9–2.1 seconds on the development PC; this is a short synthetic benchmark, not a sustained-performance guarantee. Rendering can fall behind, and both raw and rendered files consume disk space. If closing while rendering, allow the stop to complete. The existing drive editor remains separate; merging capture MP4s into one upload-ready video is still planned.
+**Output size target** offers approximately **1, 2, 4 or 8 decimal GB/hour**, plus source quality. It controls rendered/final video, separately from Live's raw-capture resolution. Hourly targets use average-bitrate encoding with audio included and four-percent headroom. Sizes are estimates, not hard guarantees. The lowest target measured about **0.94 GB/hour** in both camera runs. Selected-output size estimates appear when duration information is available.
 
-## SD download and drive workflow
+Logs are normally hidden under **Tools > Logs.** Runtime logs may contain local paths and device information; review before sharing.
 
-- **Download:** leave Camera URL blank to discover camera gateways, or enter a specific URL. **Scan Camera** inventories only; **Download New Front Clips** copies front-camera files. The two newest files are skipped by default because they may still be recording.
-- Transfers use `.part` files and check HTTP content length before renaming. Existing mismatched files are retained unless explicitly replaced in the CLI. VSQ10 Range responses are unreliable; interrupted transfers may restart from byte zero.
-- SQLite history remembers completed downloads even after local source deletion. Re-download of deleted sources requires the explicit checkbox.
-- **Drives & MP4s:** timestamp-grouped front clips can be rendered with a music playlist, route text, opening/ending title and audio visualization. Add your own permitted music to `Music/`. Camera audio is omitted by this legacy rendering workflow. Each render shuffles the available playlist once and loops that order if needed.
-- Original-resolution and target-size MP4 profiles can coexist. The target under 2 GB is a bitrate estimate, **not a hard guarantee**; inspect the final size. Very long drives can exceed the budget.
-- Creating/updating selected MP4s intentionally replaces the matching derived MP4 after a successful render. Local source, MP4 and partial deletion controls require confirmation. These legacy local operations never delete camera files. Do not convert or delete media while another program is using/uploading it.
-- **Logs:** transfer/conversion output persists in `Transfers/dashcam_transfer.log`.
+## Music, overlays and final export
 
-CLI examples:
+1. In **Studio**, set **Output size target** before capture.
+2. Open **Options > Studio settings.** Set **Drive music folder**, **Crossfade seconds**, **Channel title** and optional **Route info**. The default music folder is `Music/`; supply your own permitted audio. MP3, M4A, AAC, WAV, FLAC and OGG are supported. Unreadable tracks are skipped; an empty usable playlist prevents rendering.
+3. In **Live**, enable **Render overlay + music (Studio quality)**, then **Start Capture**. This checkbox defaults off. Music, title, route, crossfade and target are snapshotted at capture start. GUI changes are not saved between launches; `config.example.json` is a reference, not a loaded configuration.
+4. Click **Stop Capture** when finished. Wait for background rendering to finish. Do not select **Stop background rendering** if you want remaining segments rendered.
+5. Choose **Live > Options > Finalize saved capture.** Select that session folder, or select its parent row in Studio and click **Export selected**. Retain the same Studio target to avoid a second video encode.
+6. Wait for **MP4 ready**. The output is `Capture_<...>/Finalized_<time>_<id>/Capture.mp4`.
+
+Background rendering follows closed segments and keeps raw recordings. It uses one shuffled, crossfaded playlist with a cumulative music timeline, one opening and an ending on the final segment. Overlays follow source resolution without upscaling. Live rendering currently uses CPU H.264 with two threads, AAC music and an ending of up to 20 seconds. Studio's **Video encoder** and **End card seconds** apply to transferred-drive rendering, not live background rendering.
+
+Raw capture and rendering use separate processes; render failure does not stop raw capture. Rendering can fall behind. There is no persisted renderer queue/resume implementation: keep the app open until it drains. Finalization is manual; recording does not automatically produce one final MP4.
+
+Finalization checks closed sessions, complete segments, compatible parameters and space. Matching rendered video is copied; music is encoded once from the saved playlist to avoid per-segment AAC seams. A different hourly target requires encoding. Raw-only sessions can export silently. Complete interrupted rendered sessions can pass explicit recovery validation; arbitrary damaged/incomplete sessions are not guaranteed recoverable.
+
+Each finalization creates a new exclusive directory and fast-start MP4, preserving raw files, rendered segments and previous exports. **Cancel finalization** stops only that export and retains `Capture.partial.mp4` for inspection.
+
+## Storage and long captures
+
+At approximately 3.4 Mbit/s, 720p raw video uses roughly **1.5 GB/hour**. Lower capture resolutions use variable-size encoding and need separate measurement.
+
+For an illustrative eight-hour session at the **1 GB/hour** render target:
+
+| Retained files | Approximate storage |
+| --- | ---: |
+| Raw 720p capture | 12 GB |
+| Rendered segments | 8 GB |
+| Final MP4 | 8 GB |
+| Total before playlist, partial output and margin | 28 GB |
+
+Plan at least **40 GB free** for that combination. Higher targets, longer sessions and repeated exports need more. This is a capacity estimate, **not an eight-hour test result**. Source-quality rendering has no fixed hourly size. Files are not automatically deleted to free space.
+
+Capture monitors output growth and free space, stopping at a 512 MiB reserve. A started capture makes up to **three reconnect attempts total per session**, assigning new segment numbers without overwriting earlier files. Gaps may occur. After exhaustion it stops as interrupted; manually reconnect and start a new capture. Automatic resume after closure, sleep or prolonged outage is not guaranteed.
+
+During active PC capture, background rendering or Studio/finalization export, the GUI temporarily requests that Windows remain awake. Overlapping jobs share the request; it releases after the last job and on close. The screen may turn off. Idle preview and transfers do not request wakefulness. Status reports active/unavailable requests. This uses [SetThreadExecutionState](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-setthreadexecutionstate), without changing saved power plans. It does not override explicit Sleep, lid-close actions, shutdown or battery depletion. Keep the PC and camera powered.
+
+## Files and installation layouts
+
+A source checkout keeps Python modules beside this README. An organized local installation supports:
+
+```text
+Dashcam/
+  Launch DashGo.vbs          Main GUI launcher
+  App/                      Program modules and CLI helper
+  Captures/                 Raw, rendered and finalized live sessions
+  Music/                    Default music library
+  Transfers/                Downloads, history and logs
+    Drives/                 Transferred-drive exports
+  Support/
+    Docs/                   Instructions
+    Backups/                Original local source/launcher backups
+```
+
+`App/.installed-layout` marks this layout; media defaults resolve from its parent. Captures, music, transfers, history and absolute session paths need not move. The root VBS supports both layouts. The local organized installation retains CMD/PowerShell compatibility entry points. The repository does **not** ship an installer or private migration/backup artifacts; copying code into `App/` alone is not an installation procedure.
+
+CLI examples for a flat checkout (use `App/` module paths in an organized installation):
 
 ```powershell
 python -B dashcam_downloader.py --help
 python -B dashcam_downloader.py --camera http://192.168.169.1
 python -B dashcam_downloader.py --download --output D:\Dashcam\Transfers
-python -B dashcam_stitch.py --source D:\Dashcam\Transfers
-python -B dashcam_stitch.py --source D:\Dashcam\Transfers --output D:\Dashcam\Drives --stitch
+python -B dashcam_stitch.py --source D:\Dashcam\Transfers --output D:\Dashcam\Transfers\Drives --target-size 1gbh --stitch
 ```
 
-`dashcam_transfer.ps1` runs download followed by MP4 generation. `config.example.json` is a field reference only; configuration persistence is not yet implemented.
+`dashcam_transfer.ps1` downloads then renders transferred drives. Old absolute-size CLI profiles remain available alongside hourly profiles.
 
 ## Protocol evidence
 
-Direct, read-only observations on the VSQ10 (2026-10-05):
+Observed on the supported VSQ10 firmware:
 
-- `/app/getdeviceattr`: firmware/hardware identification, two cameras.
-- `/app/getmediainfo`: RTSP root URL, `transport=tcp`, separate `port=5000`.
-- `/app/capability`: opaque bit string; meanings not assumed.
-- `/app/getparamitems?param=all` and `/app/getparamvalue?param=all`: settings/options and current indexes. Reported SD-resolution choices include 1080p+1080p through 4K+2K. These are not live-quality selections.
-- Earlier verified: `/app/getsdinfo`, `/app/getfilelist?folder=loop&start=0&end=99`, and HTTP download of returned `/mnt/card/video_front/..._f.ts` paths. File-list sizes are approximate whole KiB; HTTP content length is authoritative.
+- `/app/getdeviceattr`: device/firmware information.
+- `/app/getmediainfo`: RTSP root URL, TCP transport and a separate `port=5000` field. Verified RTSP uses the advertised URL on default port 554; the separate field is not assumed to be its port.
+- `/app/getparamitems?param=all` and `/app/getparamvalue?param=all`: settings/options/current indexes. SD-resolution choices do not establish live qualities.
+- `/app/getsdinfo`, `/app/getfilelist?folder=loop&start=0&end=99`, and returned `/mnt/card/video_front/..._f.ts` HTTP paths: inventory/download workflow.
+- `/app/enterrecorder`: live-server activation verified on this firmware, with SD recording remaining on. No speculative exit, reset, format, erase or settings-write command is implemented.
 
-The official [DashGo iOS listing](https://apps.apple.com/us/app/dashgo/id1303402312) describes live preview/control. A [firsthand investigation of a different Yantop device](https://randhana.com/blog/reverse-engineering-my-dashcams-hidden-rtsp-stream) reports stream activation with `/app/enterrecorder` and RTSP/TCP on port 554. This lead was followed by direct VSQ10 validation of activation and front RTSP capture. Other controls from that investigation have not been verified here. Do not copy mutating commands to other hardware without checking their effects and recording state.
+The official [DashGo iOS listing](https://apps.apple.com/us/app/dashgo/id1303402312) describes preview/control. A [different Yantop-device investigation](https://randhana.com/blog/reverse-engineering-my-dashcams-hidden-rtsp-stream) supplied the activation lead, followed by direct VSQ10 validation. Other commands are not assumed portable.
 
-## Tests and development
+## Tests and limitations
 
 ```powershell
 python -B -m unittest discover -s tests -v
@@ -108,49 +146,26 @@ $env:DASHGO_MEDIA_TESTS = '1'
 python -B -m unittest discover -s tests -v
 ```
 
-The default suite exercises URL safeguards, read-only capability detection, measurement parsing, unique recording directories, graceful stop, simulated disk exhaustion/disconnect, history retention and inventory isolation. The opt-in FFmpeg integration test generates a small synthetic H.264/AAC fixture, serves it on localhost, probes it, records multiple segments, stops and decodes the result. Additional generated-media tests verify embedded preview, 720p overlays, closed-segment rendering, cumulative music timeline and unchanged raw files. Tests never connect to the physical camera or read user media. Temporary test files are removed after the test. Windows sandbox restrictions on Python 3.14 temporary directories can require running tests in a normal terminal.
+The offline suite passes **58 tests**, including opt-in generated-media integration. Coverage includes URL safeguards, capabilities, unique segments, simulated disk exhaustion/disconnect, shared preview/capture, lower-resolution raw export, source-hash preservation, rendering, final MP4 decoding/audio continuity, repeated exports, history, keep-awake ownership/overlap/release and both path layouts. Fixtures are generated locally; tests never connect to the physical camera. GUI tests need an interactive Windows desktop. Python 3.14 temporary-directory permissions can require a normal terminal outside a restricted sandbox.
 
-An eight-second live front sample saved and decoded successfully while read-only status still reported SD recording on. A later integrated segmented camera test and OSD/SD-control validation were not completed; those checks remain gated. No hours-long recording test has passed. The rear camera on the test unit was reported faulty and was not selected or validated. Do not treat synthetic tests as device certification.
+Separately completed validation:
 
-Architecture:
+- Two **separate** 18-minute camera runs: continuous preview, four rendered segments, finalized MP4s, clean decoding and about 0.94 GB/hour at the lowest target.
+- One 18-minute synthetic capture/render/finalization endurance run.
+- A bounded camera transition test: controlled client EOF/reconnect, unchanged prior-segment hash, preview resumption, 360p raw export and a second unique session.
+- A 25.8 MB closed-clip transfer with monotonic progress/ETA and preserved existing copy. The source had timestamp warnings; transfer integrity and source timestamps are distinct checks.
+- Installed imports, launcher, library indexing and path preservation; brief real Windows keep-awake acquire/release. No power-plan change.
 
-| Module | Responsibility |
-| --- | --- |
-| `dashcam_gui.py` | Desktop shell, transfer/drive controls, job events and local inventory |
-| `dashcam_camera_ui.py` | Explicit camera actions, embedded preview, recording state |
-| `dashcam_live.py` | Read-only capabilities, FFprobe measurements, owned FFmpeg capture lifecycle |
-| `dashcam_render.py` | Optional closed-segment background music/overlay rendering |
-| `dashcam_downloader.py` | Gateway discovery, file index, safe HTTP downloads |
-| `dashcam_history.py` | Persistent SQLite download history |
-| `dashcam_stitch.py` | Grouping, music playlist and derived MP4 rendering |
+**Known limits:** no continuous hour-long, eight-hour or moving-drive validation; no renderer restart/resume queue; no persisted GUI settings; no verified rear camera or settings writes. The native-preview endurance run recorded one early **6.5-second UI-loop delay** with unresolved cause. GUI memory stayed near 71 MB and capture FFmpeg near 105 MB in that run, not a guarantee for other workloads.
 
-## Troubleshooting
+An earlier interrupted drive retained four raw and four rendered segments totaling about 16m48s, all decodable. Historical Wi-Fi disconnect events aligned with stream termination, supporting connection interruption rather than a renderer crash. The adapter/camera/radio-level cause remains unproven. Complete retained renders were recovered into a new MP4 without changing originals.
 
-- **Camera not found:** check Wi-Fi and the base URL; avoid changing Windows network settings just to force discovery.
-- **Device information works but live probe fails:** the stream server may require a device-specific activation handshake. No activation is guessed automatically. Confirm firmware, reported URL and vendor-app behavior first.
-- **No audio:** it may be absent/disabled at the camera. The app reports what the sample contains and does not enable the microphone.
-- **Recording stops:** inspect `session.json` for a connection, stall or space reason. Retain all segments; resolve the cause and begin a new session.
-- **FFmpeg missing:** check `ffmpeg -version` and `ffprobe -version` from the same terminal used to start the GUI.
-- **MP4 conversion fails:** confirm readable music exists and sufficient disk space is available. CPU encoding is the default; NVIDIA encoding requires compatible hardware/drivers.
-- **Files are not re-downloaded:** completed history is intentional. Use the re-download option only when desired.
+No automated CI workflow is currently included. Local passing tests are not hardware certification. Packaging, signing, reproducible builds, accessibility, destination editing during preview, settings persistence and longer field validation remain future work.
 
-## Privacy and safety
+## Privacy and license
 
-The repository contains source and synthetic test definitions only. `.gitignore` excludes footage, music, capture sessions, logs, SQLite databases, local config, packet captures and build outputs. Gitignore is not a substitute for reviewing files before publishing.
+Only source, generic examples and synthetic test definitions belong in this repository. `.gitignore` excludes footage, music, sessions, databases, logs, local configuration and support/QA artifacts. Review tracked files before publication; ignore rules cannot remove previously tracked data. Public defaults use a generic title; installed personal branding/configuration stays separate.
 
-Camera HTTP is generally unencrypted on its local Wi-Fi. Do not expose camera ports to the Internet. Runtime transfer logs can contain local paths and device identifiers; do not publish them without sanitizing. Live-session manifests omit the source URL and credentials. The live UI rejects embedded URL credentials, but query strings can still be sensitive: use only trusted URLs and avoid sharing process listings. The application has no telemetry and does not upload footage.
+Camera HTTP is unencrypted on its local Wi-Fi. Do not expose it to the Internet. Live URLs cannot embed credentials, but queries and logs may still contain sensitive information. The app has no telemetry and does not upload footage.
 
-## Roadmap
-
-- Expand activation/reconnection testing; determine safe exit semantics without guessing an exit command.
-- Extend front stream measurements across longer sessions and other firmware; validate rear support on working hardware.
-- Verify safe camera controls and read-back before enabling writes.
-- Test long recording sessions, network interruptions, storage exhaustion, sleep and recovery.
-- Validate the optional background renderer on long sessions; add queue recovery, restart/resume, multi-track continuity tests and optional GPU encoding.
-- Add recording library/segment export and richer preview/capture integration. Rendering operates on closed segments; single-file, continuously finalized upload output is not implemented yet.
-- Improve accessibility, smaller-screen layouts and configuration persistence.
-- Package a Windows app/installer later, with dependency/license review, signing and reproducible builds. No current packaging/release promise.
-
-## License
-
-[MIT](LICENSE), copyright 2026 Vincent Mossman. FFmpeg is installed separately and has its own build-specific licensing terms; it is not bundled here.
+[MIT](LICENSE), copyright 2026 Vincent Mossman. FFmpeg is installed separately and retains its build-specific licensing obligations.

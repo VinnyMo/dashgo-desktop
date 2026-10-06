@@ -10,7 +10,7 @@ import os
 import random
 import re
 import shutil
-import subprocess
+import dashcam_process as subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -19,6 +19,8 @@ from pathlib import Path
 FRONT_NAME = re.compile(
     r"^(?P<stamp>\d{4}-\d{2}-\d{2}_\d{2}_\d{2}_\d{2})_f\.ts$", re.IGNORECASE
 )
+from dashcam_paths import DATA_DIR
+
 SUPPORTED_AUDIO = {".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg"}
 DRAW_FONT = r"fontfile='C\:/Windows/Fonts/arial.ttf':" if os.name == "nt" else "font=Sans:"
 
@@ -62,7 +64,7 @@ def probe_duration(ffmpeg: str, path: Path) -> float | None:
             ffprobe, "-v", "error", "-show_entries", "format=duration",
             "-of", "default=noprint_wrappers=1:nokey=1", str(path),
         ],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
     )
     try:
         value = float(completed.stdout.strip())
@@ -80,7 +82,7 @@ def probe_track(ffmpeg: str, path: Path) -> Track | None:
             "format=duration:format_tags=title,artist,album_artist",
             "-of", "json", str(path),
         ],
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=20,
     )
     try:
         info = json.loads(completed.stdout)["format"]
@@ -210,12 +212,19 @@ def choose_video_encoder(ffmpeg: str, requested: str) -> tuple[str, list[str]]:
     return "libx264", ["-preset", "fast", "-crf", "19"]
 
 
+def target_budget(mode: str, duration: float) -> int:
+    """Decimal bytes with four percent audio/container/rate-control headroom."""
+    if mode.endswith("gbh"):
+        return int(float(mode[:-3]) * 1_000_000_000 * duration / 3600 * .96)
+    return int(float(mode.removesuffix("gb")) * 960_000_000)
+
+
 def calculate_target_encoding(
     duration: float, encoder: str, max_bytes: int = TARGET_2GB_BYTES
 ) -> tuple[int | None, int, list[str]]:
     """Calculate optimal resolution (height), audio bitrate (kbps), and encoder flags
 
-    to maximize quality while strictly keeping the file size under max_bytes.
+    to estimate a file-size budget. Rate control is approximate, not a size guarantee.
     """
     dur = max(duration, 1.0)
     total_bitrate_bps = (max_bytes * 8) / dur
@@ -363,8 +372,8 @@ def ffconcat_quote(path: Path) -> str:
 
 def output_name(drive: list[Clip], target_mode: str = "original") -> str:
     start = drive[0].started.strftime("%Y-%m-%d_%H-%M-%S")
-    if target_mode == "2gb":
-        return f"Drive_{start}_2GB.mp4"
+    if target_mode != "original":
+        return f"Drive_{start}_{target_mode.upper()}.mp4"
     return f"Drive_{start}.mp4"
 
 
@@ -404,15 +413,15 @@ def stitch(
         duration = video_duration(ffmpeg, drive)
         source_dimensions = probe_dimensions(ffmpeg, drive[0].path)
         encoder, default_encoder_options = choose_video_encoder(ffmpeg, video_encoder)
-        if target_size == "2gb":
+        if target_size != "original":
             scale_height, audio_kbps, encoder_options = calculate_target_encoding(
-                duration, encoder, TARGET_2GB_BYTES
+                duration, encoder, target_budget(target_size, duration)
             )
             if scale_height is not None and scale_height >= source_dimensions[1]:
                 scale_height = None  # A size target must never upscale the source.
             res_label = f"scaled to {scale_height}p" if scale_height else "4K unscaled"
             print(
-                f"TARGET < 2 GB: duration {duration:.1f}s, resolution {res_label}, "
+                f"TARGET {target_size}: duration {duration:.1f}s, resolution {res_label}, "
                 f"audio {audio_kbps}k, encoder options {encoder_options}"
             )
         else:
@@ -473,7 +482,7 @@ def stitch(
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--source", type=Path, default=Path(__file__).resolve().parent / "Transfers",
+        "--source", type=Path, default=DATA_DIR / "Transfers",
         help="directory containing downloaded *_f.ts clips (default: %(default)s)"
     )
     parser.add_argument("--route-info", default="", help="optional persistent bottom-right route caption")
@@ -487,11 +496,11 @@ def parse_args() -> argparse.Namespace:
         help="overlay rendering encoder (default: auto uses reliable CPU H.264)"
     )
     parser.add_argument(
-        "--target-size", choices=("original", "2gb"), default="original",
+        "--target-size", choices=("original", "0.5gb", "1gb", "2gb", "4gb", "8gb", "1gbh", "2gbh", "4gbh", "8gbh"), default="original",
         help="output size profile: original (4K CRF 19) or 2gb (highest quality under 2 GB; default: %(default)s)"
     )
     parser.add_argument(
-        "--output", type=Path, default=Path(__file__).resolve().parent / "Transfers" / "Drives",
+        "--output", type=Path, default=DATA_DIR / "Transfers" / "Drives",
         help="MP4 output directory (default: %(default)s)"
     )
     parser.add_argument(
@@ -500,7 +509,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--ffmpeg", type=Path, help="explicit path to ffmpeg.exe")
     parser.add_argument(
-        "--music-dir", type=Path, default=Path(__file__).resolve().parent / "Music",
+        "--music-dir", type=Path, default=DATA_DIR / "Music",
         help="music folder rescanned for every MP4 (default: %(default)s)"
     )
     parser.add_argument(

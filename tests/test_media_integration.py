@@ -99,6 +99,64 @@ class MediaIntegration(unittest.TestCase):
                 panel.shutdown()
             root.destroy()
 
+    def test_preview_and_lower_quality_capture_share_one_process(self):
+        fixture = self.root / "synthetic720.ts"
+        subprocess.run([media_tool("ffmpeg"), "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=12",
+                        "-t", "12", "-c:v", "libx264", "-preset", "ultrafast", "-g", "12", "-f", "mpegts", str(fixture)], check=True, timeout=30)
+        original = self.__class__.data
+        self.__class__.data = fixture.read_bytes()
+        session = CaptureSession(self.url, self.root / "preview-capture", {"streams": [{"type": "video", "height": 720}]},
+                                 segment_seconds=1, quality=360, preview=True)
+        try:
+            session.start()
+            frame = session.frames.get(timeout=10)
+            self.assertTrue(frame.startswith(b"P6\n1280 720\n255\n"))
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline and len(list(session.directory.glob("*.mkv"))) < 2:
+                time.sleep(0.1)
+            session.stop()
+            session.wait()
+            self.assertIsNotNone(session.process.poll())
+            part = sorted(session.directory.glob("*.mkv"))[0]
+            result = subprocess.run([media_tool("ffprobe"), "-v", "error", "-show_entries", "stream=width,height", "-of", "json", str(part)], capture_output=True, timeout=10)
+            stream = json.loads(result.stdout)["streams"][0]
+            self.assertEqual(stream['height'], 360)
+            from dashcam_finalize import CaptureFinalizer
+            import hashlib
+            parts = sorted(session.directory.glob('*.mkv'))
+            hashes = [hashlib.sha256(p.read_bytes()).hexdigest() for p in parts]
+            finalizer = CaptureFinalizer(session.directory, raw_only=True, target_size='1gbh')
+            finalizer.start()
+            finalizer.wait(30)
+            self.assertEqual(finalizer.state, 'finished', finalizer.reason)
+            decoded = subprocess.run([media_tool('ffmpeg'), '-v', 'error', '-i', str(finalizer.output), '-f', 'null', '-'], capture_output=True, timeout=15)
+            self.assertEqual(decoded.returncode, 0, decoded.stderr)
+            self.assertEqual(decoded.stderr, b'')
+            self.assertEqual(hashes, [hashlib.sha256(p.read_bytes()).hexdigest() for p in parts])
+        finally:
+            session.stop()
+            session.wait()
+            self.__class__.data = original
 
-if __name__ == "__main__":
-    unittest.main()
+    def test_disconnect_reconnect_retains_prior_segment_and_stops(self):
+        import hashlib
+        session = CaptureSession(self.url, self.root / "reconnect", {"streams": []}, segment_seconds=1, reconnect_attempts=1)
+        session.start()
+        try:
+            deadline = time.monotonic() + 15
+            while time.monotonic() < deadline and session.reconnects == 0:
+                time.sleep(.05)
+            self.assertEqual(session.reconnects, 1)
+            prior = sorted(session.directory.glob("part_*.mkv"))[0]
+            digest = hashlib.sha256(prior.read_bytes()).hexdigest()
+            first_count = len(list(session.directory.glob("part_*.mkv")))
+            while time.monotonic() < deadline and len(list(session.directory.glob("part_*.mkv"))) <= first_count:
+                time.sleep(.05)
+            self.assertGreater(len(list(session.directory.glob("part_*.mkv"))), first_count)
+            session.stop()
+            session.wait()
+            self.assertEqual(hashlib.sha256(prior.read_bytes()).hexdigest(), digest)
+            self.assertIsNotNone(session.process.poll())
+        finally:
+            session.stop()
+            session.wait()

@@ -4,32 +4,39 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import queue
-import subprocess
+import dashcam_process as subprocess
 import sys
 import threading
+import traceback
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from dashcam_history import DownloadHistory
+from dashcam_paths import APP_DIR, DATA_DIR
+from dashcam_power import KeepAwake
 from dashcam_camera_ui import CameraPanel
 from dashcam_stitch import Clip, group_drives, output_name, scan_clips
 
-APP_DIR = Path(__file__).resolve().parent
 DOWNLOADER = APP_DIR / "dashcam_downloader.py"
 STITCHER = APP_DIR / "dashcam_stitch.py"
 CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
 
 
 class DashcamGUI(tk.Tk):
-    def __init__(self) -> None:
+    def __init__(self, *, auto_connect=True) -> None:
         super().__init__()
         self.title("DashGo Desktop")
         self.geometry("1080x840")
         self.minsize(1000, 780)
+        self.auto_connect = auto_connect and os.environ.get("DASHGO_NO_AUTO_CONNECT") != "1"
         self.task_running = False
+        self.task_keeps_awake = False
+        self.keep_awake = KeepAwake()
+        self._power_error = None
         self._style()
         self.process: subprocess.Popen[str] | None = None
         self.events: queue.Queue[tuple[str, object]] = queue.Queue()
@@ -39,11 +46,11 @@ class DashcamGUI(tk.Tk):
         self.initial_inventory_logged = False
 
         self.camera = tk.StringVar()
-        self.output = tk.StringVar(value=str(Path(__file__).resolve().parent / "Transfers"))
+        self.output = tk.StringVar(value=str(DATA_DIR / "Transfers"))
         self.gap = tk.StringVar(value="5")
         self.skip_newest = tk.StringVar(value="2")
         self.redownload = tk.BooleanVar(value=False)
-        self.music_dir = tk.StringVar(value=str(Path(__file__).resolve().parent / "Music"))
+        self.music_dir = tk.StringVar(value=str(DATA_DIR / "Music"))
         self.crossfade = tk.StringVar(value="3")
         self.route_info = tk.StringVar()
         self.channel_title = tk.StringVar(value="My Drive")
@@ -58,6 +65,38 @@ class DashcamGUI(tk.Tk):
         self.after(100, self._drain_events)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
+    def report_callback_exception(self, exception, value, tb):
+        try:
+            self._append("UI ERROR: " + "".join(traceback.format_exception(exception, value, tb)))
+            self.status.set("An interface action failed. Details are in Tools → Logs.")
+        except Exception:
+            pass
+
+    def _sync_awake(self):
+        panel = self.camera_panel
+        reasons = {name for name, job in (('capture', panel.capture),
+                   ('render', panel.renderer), ('export', panel.finalizer)) if job and job.active}
+        if self.task_running and self.task_keeps_awake:
+            reasons.add('studio export')
+        try:
+            self.keep_awake.update(reasons)
+            self._power_error = None
+        except OSError as exc:
+            if self._power_error != str(exc):
+                self._append('POWER: ' + str(exc) + '\n')
+            self._power_error = str(exc)
+        if self._power_error:
+            self.power_status.set('Keep-awake unavailable; check Windows sleep settings')
+        else:
+            self.power_status.set('Keeping PC awake during media jobs' if self.keep_awake.active else '')
+
+    def destroy(self):
+        try:
+            if hasattr(self, 'keep_awake'):
+                self.keep_awake.close()
+        finally:
+            super().destroy()
+
     def _style(self) -> None:
         style = ttk.Style(self)
         style.theme_use("clam")
@@ -70,6 +109,7 @@ class DashcamGUI(tk.Tk):
         style.configure("TNotebook", borderwidth=0)
         style.configure("TNotebook.Tab", padding=(18, 10))
         style.map("TNotebook.Tab", background=[("selected", "#ffffff")], padding=[("selected", (18, 10)), ("!selected", (18, 10))])
+        style.configure("Transfer.Horizontal.TProgressbar", background="#2359b8", troughcolor="#e3e9f2", borderwidth=0, thickness=20)
         style.configure("TEntry", fieldbackground="#ffffff", padding=6)
         style.configure("Muted.TLabel", foreground="#59677c")
         style.configure("Treeview", rowheight=30, fieldbackground="#ffffff", background="#ffffff")
@@ -101,26 +141,70 @@ class DashcamGUI(tk.Tk):
         self.tabs.pack(fill="both", expand=True)
         self.download_tab = ttk.Frame(self.tabs, padding=12)
         self.drives_tab = ttk.Frame(self.tabs, padding=12)
-        self.logs_tab = ttk.Frame(self.tabs, padding=8)
+        self.logs_window = tk.Toplevel(self)
+        self.logs_window.title("Diagnostic logs")
+        self.logs_window.geometry("900x600")
+        self.logs_window.withdraw()
+        self.logs_window.protocol("WM_DELETE_WINDOW", lambda: (self.logs_window.grab_release(), self.logs_window.withdraw()))
+        self.logs_tab = ttk.Frame(self.logs_window, padding=8)
+        self.logs_tab.pack(fill="both", expand=True)
         self.camera_panel = CameraPanel(self.tabs, self)
-        self.tabs.add(self.camera_panel, text="Camera")
-        self.tabs.add(self.download_tab, text="Download")
-        self.tabs.add(self.drives_tab, text="Drives & MP4s")
-        self.tabs.add(self.logs_tab, text="Logs")
+        self.tabs.add(self.camera_panel, text="Live")
+        self.tabs.add(self.download_tab, text="Transfer")
+        self.tabs.add(self.drives_tab, text="Studio")
+        menu = tk.Menu(self)
+        tools = tk.Menu(menu, tearoff=False)
+        tools.add_command(label="Logs…", command=lambda: self._show_window(self.logs_window, modal=True))
+        tools.add_command(label="Live settings…", command=self.camera_panel._advanced)
+        menu.add_cascade(label="Tools", menu=tools)
+        self.configure(menu=menu)
         self._build_download()
         self._build_drives()
         self._build_logs()
 
         footer = ttk.Frame(outer)
         footer.pack(side="bottom", fill="x", pady=(8, 0), before=self.tabs)
+        self.power_status = tk.StringVar()
+        ttk.Label(footer, textvariable=self.power_status).pack(side="right", padx=8)
         self.spinner = ttk.Progressbar(footer, mode="indeterminate", length=130)
         self.spinner.pack(side="left", padx=(0, 10))
         ttk.Label(footer, textvariable=self.status).pack(side="left")
         self.cancel_button = ttk.Button(footer, text="Cancel Current Task", command=self._cancel, state="disabled")
-        self.cancel_button.pack(side="right")
 
-    def _build_download(self) -> None:
-        tab = self.download_tab
+
+    def _show_window(self, window, modal=False):
+        window.deiconify()
+        window.lift()
+        if modal:
+            window.transient(self)
+            window.grab_set()
+
+    def _build_download(self):
+        self.transfer_settings = tk.Toplevel(self)
+        self.transfer_settings.title("Transfer settings")
+        self.transfer_settings.geometry("920x530")
+        self.transfer_settings.withdraw()
+        self.transfer_settings.protocol("WM_DELETE_WINDOW", self.transfer_settings.withdraw)
+        self._build_transfer_settings()
+        bar = ttk.Frame(self.download_tab)
+        bar.pack(fill="x", pady=12)
+        self.download_button = ttk.Button(bar, text="Transfer stored clips", command=self._download, style="Accent.TButton")
+        self.download_button.pack(side="left")
+        options = ttk.Menubutton(bar, text="Options")
+        options.pack(side="right")
+        menu = tk.Menu(options, tearoff=False)
+        menu.add_command(label="Transfer settings…", command=lambda: self._show_window(self.transfer_settings))
+        menu.add_command(label="Cancel transfer", command=self._cancel)
+        menu.add_command(label="Open source folder", command=lambda: self._open(self.source_dir))
+        options.configure(menu=menu)
+        self.transfer_progress = ttk.Progressbar(self.download_tab, mode="determinate", maximum=100, style="Transfer.Horizontal.TProgressbar")
+        self.transfer_progress.pack(fill="x", pady=20)
+        self.transfer_detail = tk.StringVar(value="Ready to copy new stored clips from the camera.")
+        ttk.Label(self.download_tab, textvariable=self.transfer_detail, wraplength=900).pack(anchor="w")
+
+    def _build_transfer_settings(self) -> None:
+        tab = ttk.Frame(self.transfer_settings, padding=16)
+        tab.pack(fill="both", expand=True)
         tab.columnconfigure(1, weight=1)
         ttk.Label(tab, text="Camera URL").grid(row=0, column=0, sticky="w", padx=(0, 8))
         ttk.Entry(tab, textvariable=self.camera).grid(row=0, column=1, columnspan=2, sticky="ew")
@@ -166,9 +250,33 @@ class DashcamGUI(tk.Tk):
 
     def _build_drives(self) -> None:
         tab = self.drives_tab
+        self.studio_settings = tk.Toplevel(self)
+        self.studio_settings.title("Studio settings")
+        self.studio_settings.geometry("960x500")
+        self.studio_settings.withdraw()
+        self.studio_settings.protocol("WM_DELETE_WINDOW", self.studio_settings.withdraw)
+        settings = ttk.Frame(self.studio_settings, padding=16)
+        settings.pack(fill="both", expand=True)
+        quality = ttk.Frame(tab)
+        quality.grid(row=0, column=0, sticky="ew", pady=10)
+        ttk.Label(quality, text="Output size target").pack(side="left")
+        self.output_quality_label = tk.StringVar(value="Source quality")
+        ttk.Scale(quality, from_=0, to=4, value=4, length=220, command=self._size_changed).pack(side="left", padx=12)
+        ttk.Label(quality, textvariable=self.output_quality_label).pack(side="left")
+        options = ttk.Menubutton(quality, text="Options")
+        options.pack(side="right")
+        menu = tk.Menu(options, tearoff=False)
+        options.configure(menu=menu)
+        menu.add_command(label="Studio settings…", command=lambda: self._show_window(self.studio_settings))
+        menu.add_command(label="Refresh library", command=self._refresh_drives)
+        menu.add_command(label="Open selected folder", command=self._open_selected)
+        menu.add_separator()
+        menu.add_command(label="Delete selected source clips…", command=self._delete_sources)
+        menu.add_command(label="Delete selected MP4s…", command=self._delete_mp4s)
+        menu.add_command(label="Delete selected partials…", command=self._delete_partials)
         tab.rowconfigure(4, weight=1)
         tab.columnconfigure(0, weight=1)
-        controls = ttk.Frame(tab)
+        controls = ttk.Frame(settings)
         controls.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         ttk.Label(controls, text="New drive after gap (minutes):").pack(side="left")
         ttk.Entry(controls, textvariable=self.gap, width=7).pack(side="left", padx=(6, 12))
@@ -180,7 +288,7 @@ class DashcamGUI(tk.Tk):
             side="right", padx=8
         )
 
-        music = ttk.Frame(tab)
+        music = ttk.Frame(settings)
         music.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         music.columnconfigure(1, weight=1)
         ttk.Label(music, text="Drive music folder:").grid(row=0, column=0, sticky="w")
@@ -189,7 +297,7 @@ class DashcamGUI(tk.Tk):
         ttk.Label(music, text="Crossfade seconds:").grid(row=0, column=3, padx=(16, 4))
         ttk.Entry(music, textvariable=self.crossfade, width=7).grid(row=0, column=4)
 
-        presentation = ttk.LabelFrame(tab, text="Video presentation", padding=8)
+        presentation = ttk.LabelFrame(settings, text="Video presentation", padding=8)
         presentation.grid(row=2, column=0, sticky="ew", pady=(0, 8))
         presentation.columnconfigure(1, weight=1)
         ttk.Label(presentation, text="Route info (optional):").grid(row=0, column=0, sticky="w")
@@ -209,31 +317,19 @@ class DashcamGUI(tk.Tk):
             presentation, textvariable=self.video_encoder,
             values=("auto", "h264_nvenc", "libx264"), state="readonly", width=21,
         ).grid(row=1, column=3, sticky="w", padx=(6, 0), pady=(7, 0))
-        ttk.Label(presentation, text="Output target:").grid(row=2, column=0, sticky="w", pady=(7, 0))
-        toggle_frame = ttk.Frame(presentation)
-        toggle_frame.grid(row=2, column=1, sticky="w", padx=(6, 16), pady=(7, 0))
-        ttk.Radiobutton(
-            toggle_frame, text="Original (4K)", variable=self.output_mode,
-            value="original", command=self._update_output_mode_hint,
-        ).pack(side="left")
-        ttk.Radiobutton(
-            toggle_frame, text="Target < 2 GB", variable=self.output_mode,
-            value="2gb", command=self._update_output_mode_hint,
-        ).pack(side="left", padx=(10, 0))
-        self.output_mode_hint = ttk.Label(
-            presentation, text="", font=("Segoe UI", 9, "italic")
-        )
-        self.output_mode_hint.grid(row=2, column=2, columnspan=2, sticky="w", padx=(6, 0), pady=(7, 0))
-        self._update_output_mode_hint()
+        self.output_mode_hint = ttk.Label(presentation, text="Final-render quality is set with the Studio slider.")
+        self.output_mode_hint.grid(row=2, column=0, columnspan=4, sticky="w", pady=8)
 
         ttk.Label(
             tab,
-            text="Select one or more timestamp-grouped drives. Source deletion is permanent, but download history is retained.",
+            text="Transferred drives and live captures. Select an item to export or open its folder.",
         ).grid(row=3, column=0, sticky="w", pady=(0, 6))
         columns = ("start", "end", "clips", "source_size", "mp4", "partial")
-        self.drive_tree = ttk.Treeview(tab, columns=columns, show="headings", selectmode="extended")
+        self.drive_tree = ttk.Treeview(tab, columns=columns, show="tree headings", selectmode="extended")
+        self.drive_tree.column("#0", width=28, stretch=False)
+        self.drive_tree.bind("<<TreeviewSelect>>", lambda event: self._size_changed(("1gbh", "2gbh", "4gbh", "8gbh", "original").index(self.output_mode.get()) if self.output_mode.get() in ("1gbh", "2gbh", "4gbh", "8gbh", "original") else 4))
         headings = {
-            "start": "Drive start", "end": "Drive end", "clips": "Clips",
+            "start": "Drive / capture / file", "end": "End / state", "clips": "Clips",
             "source_size": "Source size", "mp4": "MP4 status", "partial": "Interrupted partials"
         }
         widths = {
@@ -251,7 +347,7 @@ class DashcamGUI(tk.Tk):
         actions = ttk.Frame(tab)
         actions.grid(row=5, column=0, sticky="ew", pady=(10, 0))
         self.convert_button = ttk.Button(
-            actions, text="Start / Restart Selected Conversions", command=self._convert
+            actions, text="Export selected", command=self._convert
         )
         self.delete_sources_button = ttk.Button(
             actions, text="Delete Selected Source Clips", command=self._delete_sources
@@ -261,9 +357,37 @@ class DashcamGUI(tk.Tk):
             actions, text="Delete Selected Partials", command=self._delete_partials
         )
         self.convert_button.pack(side="left")
-        self.delete_sources_button.pack(side="left", padx=8)
-        self.delete_mp4_button.pack(side="left")
-        self.delete_partials_button.pack(side="left", padx=8)
+        ttk.Button(actions, text="Open selected folder", command=self._open_selected).pack(side="left", padx=8)
+
+    def _size_changed(self, value):
+        mode = ("1gbh", "2gbh", "4gbh", "8gbh", "original")[min(4, max(0, round(float(value))))]
+        self.output_mode.set(mode)
+        seconds = 0.0
+        for key in self.drive_tree.selection() if hasattr(self, "drive_tree") else []:
+            folder = getattr(self, "capture_rows", {}).get(key)
+            if folder:
+                try:
+                    seconds += json.loads((folder / "Rendered" / "render.json").read_text()).get("rendered_seconds", 0)
+                except (OSError, ValueError):
+                    pass
+            else:
+                clips = self.drive_rows.get(key, [])
+                if clips:
+                    seconds += (clips[-1].started - clips[0].started).total_seconds() + 60
+        text = "Source quality" if mode == "original" else f"≈ {mode[:-3]} GB/hour"
+        if seconds and mode != "original":
+            text += f" · ≈ {float(mode[:-3]) * seconds / 3600:.2f} GB selected"
+        self.output_quality_label.set(text)
+
+    def _open_selected(self):
+        for key in self.drive_tree.selection():
+            if key in getattr(self, "capture_rows", {}):
+                self._open(self.capture_rows[key])
+                return
+            paths = self.mp4_rows.get(key) or getattr(self, "capture_sources", {}).get(key) or [clip.path for clip in self.drive_rows.get(key, [])]
+            if paths:
+                self._open(paths[0].parent)
+                return
 
     def _update_output_mode_hint(self) -> None:
         if self.output_mode.get() == "2gb":
@@ -349,6 +473,13 @@ class DashcamGUI(tk.Tk):
         return [self.drive_rows[item] for item in self.drive_tree.selection() if item in self.drive_rows]
 
     def _convert(self) -> None:
+        captures = [self.capture_rows[key] for key in self.drive_tree.selection() if key in getattr(self, "capture_rows", {})]
+        if captures:
+            if len(captures) != 1:
+                messagebox.showinfo("Select one capture", "Export one capture at a time.")
+                return
+            self.camera_panel.finalize_path(captures[0])
+            return
         settings = self._settings()
         drives = [drive for drive in self._selected_drives() if drive]
         if not settings or not drives:
@@ -405,10 +536,12 @@ class DashcamGUI(tk.Tk):
                 "--target-size", self.output_mode.get(),
                 "--overwrite", "--stitch"
             ])
-        mode_label = "Original 4K" if self.output_mode.get() == "original" else "< 2 GB"
+        mode_label = "Source quality" if self.output_mode.get() == "original" else self.output_mode.get()
         self._start(commands, f"Creating {len(commands)} selected MP4(s) [{mode_label}]")
 
     def _delete_partials(self) -> None:
+        if not self._media_edit_allowed():
+            return
         paths = {
             path for item in self.drive_tree.selection()
             for path in self.partial_rows.get(item, []) if path.exists()
@@ -435,7 +568,23 @@ class DashcamGUI(tk.Tk):
             messagebox.showerror("Some partials were not deleted", "See the Logs tab for details.")
         self._refresh_drives()
 
+    def _media_edit_allowed(self):
+        panel = self.camera_panel
+        if self.task_running or any(job and job.active for job in (panel.capture, panel.renderer, panel.finalizer)):
+            messagebox.showinfo("Media in use", "Finish capture, rendering, export or transfer before changing library files.")
+            return False
+        return True
+
     def _delete_sources(self) -> None:
+        if not self._media_edit_allowed():
+            return
+        raw = {path for key in self.drive_tree.selection() for path in getattr(self, "capture_sources", {}).get(key, [])}
+        if raw:
+            if messagebox.askyesno("Delete selected raw captures?", f"Permanently delete {len(raw)} selected local raw segment(s)? Rendered files remain. Missing sources prevent future session finalization.", icon="warning"):
+                for path in raw:
+                    path.unlink(missing_ok=True)
+                self._refresh_drives()
+            return
         drives = [drive for drive in self._selected_drives() if drive]
         if not drives:
             messagebox.showinfo("Select drives", "Select one or more drives first.")
@@ -465,6 +614,8 @@ class DashcamGUI(tk.Tk):
         self._refresh_all()
 
     def _delete_mp4s(self) -> None:
+        if not self._media_edit_allowed():
+            return
         paths = [
             path for item in self.drive_tree.selection()
             for path in self.mp4_rows.get(item, [])
@@ -597,20 +748,57 @@ class DashcamGUI(tk.Tk):
                 )
                 self.drive_rows[key] = []
                 self.partial_rows[key] = [partial]
-            self.status.set(f"Ready — {len(drives)} local drive group(s)")
+            self.capture_rows = {}
+            self.capture_sources = {}
+            root = Path(self.camera_panel.destination.get())
+            for folder in sorted(root.glob("Capture_*")):
+                if not folder.is_dir():
+                    continue
+                key = "capture-" + folder.name
+                raw = sorted(folder.glob("part_*.mkv"))
+                rendered = sorted(folder.glob("Rendered/part_*.mp4"))
+                final = sorted(folder.glob("Finalized_*/Capture.mp4"))
+                try:
+                    record = json.loads((folder / "session.json").read_text())
+                    state = record.get("state", "Unknown")
+                except (OSError, ValueError):
+                    state = "Status unavailable"
+                self.drive_tree.insert("", "end", iid=key, values=(folder.name.removeprefix("Capture_"), state,
+                    len(raw), self._human(sum(p.stat().st_size for p in raw)),
+                    f"{len(rendered)} rendered / {len(final)} final MP4s", ""))
+                self.capture_rows[key] = folder
+                self.mp4_rows[key] = rendered + final
+                self.drive_rows[key] = []
+                self.capture_sources[key] = raw
+                for index, path in enumerate([*raw, *rendered, *final]):
+                    child = f"{key}-file-{index}"
+                    kind = "Raw capture" if path.suffix == ".mkv" else "Final MP4" if path in final else "Rendered segment"
+                    self.drive_tree.insert(key, "end", iid=child, values=(path.name, kind, 1, self._human(path.stat().st_size), "", ""))
+                    self.drive_rows[child] = []
+                    if path.suffix == ".mkv":
+                        self.capture_sources[child] = [path]
+                    else:
+                        self.mp4_rows[child] = [path]
+            if not self.task_running:
+                self.status.set(f"{len(drives)} transferred drive(s) · {len(self.capture_rows)} live capture(s)")
         except (OSError, ValueError) as exc:
             self._append(f"DRIVE INVENTORY ERROR: {exc}\n")
 
     def _start(self, commands: list[list[str]], label: str) -> None:
+        if self.camera_panel.preview is not None:
+            self.camera_panel._stop_preview()
         if self.process is not None or self.task_running or self.camera_panel.busy:
             messagebox.showinfo("Task running", "Cancel or wait for the current task first.")
             return
         self.task_running = True
-        self.tabs.select(self.logs_tab)
+        self.task_keeps_awake = any(str(STITCHER) in command for command in commands)
+        self._sync_awake()
         self._append(f"\n=== {label} ===\n")
         self.status.set(label)
         self._set_task_controls(False)
         self.cancel_button.configure(state="normal")
+        self.cancel_button.pack(side="right")
+        self.transfer_detail.set(label)
         self.spinner.start(12)
         threading.Thread(target=self._worker, args=(commands,), daemon=True).start()
 
@@ -647,18 +835,33 @@ class DashcamGUI(tk.Tk):
             while True:
                 kind, value = self.events.get_nowait()
                 if kind == "log":
-                    self._append(str(value))
+                    line = str(value)
+                    if line.startswith("PROGRESS "):
+                        try:
+                            progress = json.loads(line[9:])
+                            self.transfer_progress['value'] = progress['percent']
+                            eta = progress.get('eta_seconds')
+                            remaining = f"{int(eta)//60}m {int(eta)%60:02}s left" if eta is not None else "Estimating time remaining"
+                            self.transfer_detail.set(f"{progress['percent']:.1f}% · {self._human(progress['done'])} / {self._human(progress['total'])} · {remaining}")
+                        except (ValueError, KeyError):
+                            pass
+                    else:
+                        self._append(line)
                 elif kind == "done":
                     success, message = value  # type: ignore[misc]
                     self.task_running = False
+                    self.task_keeps_awake = False
+                    self._sync_awake()
                     self.spinner.stop()
                     self.cancel_button.configure(state="disabled")
+                    self.cancel_button.pack_forget()
                     self._set_task_controls(True)
                     self.status.set(str(message))
                     self._append(f"=== {message} ===\n")
                     self._refresh_all()
-                    if not success:
-                        messagebox.showerror("Dashcam Transfer", f"{message}\n\nDetails are saved in the Logs tab and log file.")
+                    self.transfer_detail.set(str(message))
+                    if self.auto_connect:
+                        self.camera_panel._preview()
         except queue.Empty:
             pass
         self.after(100, self._drain_events)
@@ -675,6 +878,8 @@ class DashcamGUI(tk.Tk):
     def _append(self, text: str) -> None:
         self.log.configure(state="normal")
         self.log.insert("end", text)
+        if int(self.log.index("end-1c").split(".")[0]) > 2000:
+            self.log.delete("1.0", "1000.0")
         self.log.see("end")
         self.log.configure(state="disabled")
         try:
@@ -687,7 +892,9 @@ class DashcamGUI(tk.Tk):
     def _load_existing_log(self) -> None:
         try:
             if self.log_path.exists():
-                text = self.log_path.read_text(encoding="utf-8", errors="replace")
+                with self.log_path.open("rb") as source:
+                    source.seek(max(0, self.log_path.stat().st_size - 100_000))
+                    text = source.read().decode("utf-8", errors="replace")
                 self.log.configure(state="normal")
                 self.log.insert("end", text[-100_000:])
                 self.log.see("end")
@@ -722,10 +929,14 @@ class DashcamGUI(tk.Tk):
 
     def _close(self) -> None:
         if self.camera_panel.operation:
-            messagebox.showinfo("Camera check running", "Wait for the current camera check to finish before closing (up to 50 seconds).")
+            self.camera_panel._cancel_connect()
+            self.status.set("Closing after the current connection request finishes…")
+            self.after(150, self._close)
             return
+        if self.camera_panel.preview is not None and not any(job and job.active for job in (self.camera_panel.capture, self.camera_panel.renderer, self.camera_panel.finalizer)):
+            self.camera_panel._stop_preview()
         if self.camera_panel.busy:
-            if not messagebox.askyesno("Camera task running", "Stop preview, PC recording and background rendering, then close?"):
+            if not messagebox.askyesno("Camera task running", "Stop preview, PC recording, rendering and finalization, then close?"):
                 return
             try:
                 self.camera_panel.shutdown()

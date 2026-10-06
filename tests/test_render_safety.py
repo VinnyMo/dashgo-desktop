@@ -92,11 +92,13 @@ class RenderSafety(unittest.TestCase):
     def test_close_stops_both_jobs_before_waiting(self):
         capture = SimpleNamespace(active=True, stop=Mock(), wait=Mock(side_effect=TimeoutError()))
         renderer = SimpleNamespace(active=True, stop=Mock(), wait=Mock())
-        panel = SimpleNamespace(capture=capture, renderer=renderer, _stop_preview=Mock())
+        finalizer = SimpleNamespace(active=True, stop=Mock(), wait=Mock())
+        panel = SimpleNamespace(capture=capture, renderer=renderer, finalizer=finalizer, _stop_preview=Mock())
         with self.assertRaises(TimeoutError):
             CameraPanel.shutdown(panel)
         capture.stop.assert_called_once()
         renderer.stop.assert_called_once()
+        finalizer.stop.assert_called_once()
 
     def test_intro_only_first_segment_endcard_only_final(self):
         args = ([Track(Path("music"), 100, "Title", "Artist")], 3, 100, 30,

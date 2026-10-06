@@ -7,7 +7,7 @@ import argparse
 import json
 import os
 import sys
-import subprocess
+import dashcam_process as subprocess
 import time
 import urllib.error
 import urllib.parse
@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
 from dashcam_history import DownloadHistory
+from dashcam_paths import DATA_DIR
 
 PAGE_SIZE = 100
 CHUNK_SIZE = 1024 * 1024
@@ -129,15 +130,21 @@ def human_size(value: int) -> str:
     raise AssertionError("unreachable")
 
 
+PROGRESS = {"done": 0, "total": 0, "started": 0.0, "last": 0.0}
+
+
 def show_progress(name: str, current: int, total: int, started: float) -> None:
-    elapsed = max(time.monotonic() - started, 0.001)
-    percent = current * 100 / total if total else 0
-    print(
-        f"\r{name}: {percent:6.2f}%  {human_size(current)} / {human_size(total)}  "
-        f"{human_size(int(current / elapsed))}/s",
-        end="",
-        flush=True,
-    )
+    now = time.monotonic()
+    if now - PROGRESS['last'] < 0.5 and current < total:
+        return
+    PROGRESS['last'] = now
+    done = min(PROGRESS['total'], PROGRESS['done'] + current)
+    elapsed = max(now - PROGRESS['started'], 0.001)
+    rate = done / elapsed
+    remaining = max(0, PROGRESS['total'] - done)
+    print('PROGRESS ' + json.dumps({'done': done, 'total': PROGRESS['total'],
+          'percent': done * 100 / PROGRESS['total'] if PROGRESS['total'] else 100,
+          'eta_seconds': remaining / rate if rate > 0 and elapsed > 2 else None}), flush=True)
 
 
 def download_one(
@@ -211,7 +218,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--folder", default="loop", help="camera recording category")
     parser.add_argument(
-        "--output", type=Path, default=Path(__file__).resolve().parent / "Transfers",
+        "--output", type=Path, default=DATA_DIR / "Transfers",
         help="download directory (default: %(default)s)"
     )
     parser.add_argument("--download", action="store_true", help="download; default is list-only")
@@ -279,6 +286,12 @@ def main() -> int:
     with DownloadHistory(history_path) as history:
         history.import_local_sources(args.output)
         history.reconcile(args.output)
+        pending = [item for item in selected
+                   if (args.redownload_missing or not history.was_downloaded(item.remote_path))
+                   and not (args.output / item.filename).exists()]
+        pending_names = {item.filename for item in pending}
+        PROGRESS.update(done=0, total=sum(item.size for item in pending), started=time.monotonic(), last=0)
+        show_progress("", 0, 0, PROGRESS['started'])
         for item in selected:
             final_path = args.output / item.filename
             if (
@@ -293,6 +306,9 @@ def main() -> int:
                     base_url, item, args.output, args.timeout, args.replace_mismatched
                 )
                 counts[result] += 1
+                if item.filename in pending_names:
+                    PROGRESS["done"] += item.size
+                show_progress(item.filename, 0, 0, PROGRESS["started"])
                 if result in ("downloaded", "existing"):
                     history.record_download(
                         item.remote_path, item.filename, final_path.stat().st_size

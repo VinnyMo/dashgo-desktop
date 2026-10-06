@@ -6,18 +6,19 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
+import dashcam_process as subprocess
 import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
 
 from dashcam_live import CREATE_NO_WINDOW, RESERVE_BYTES, media_tool
-from dashcam_stitch import build_music_playlist, presentation_filter, probe_dimensions, probe_duration
+from dashcam_stitch import build_music_playlist, presentation_filter, probe_dimensions, probe_duration, calculate_target_encoding, target_budget
 
 
 class BackgroundRenderer:
-    def __init__(self, capture, music_dir: Path, channel_title: str, route_info: str = "", crossfade: float = 3):
+    def __init__(self, capture, music_dir: Path, channel_title: str, route_info: str = "", crossfade: float = 3, *, target_size="original"):
+        self.target_size = target_size
         self.capture = capture
         self.music_dir = Path(music_dir)
         self.channel_title = channel_title
@@ -55,7 +56,7 @@ class BackgroundRenderer:
 
     def _status(self, order=None):
         data = {"state": self.state, "reason": self.reason, "completed_segments": self.completed,
-                "rendered_seconds": self.timeline, "encoding_threads": 2,
+                "rendered_seconds": self.timeline, "encoding_threads": 2, "target_size": self.target_size,
                 "playlist_order": order or []}
         tmp = self.directory / "render.json.tmp"
         tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -135,11 +136,15 @@ class BackgroundRenderer:
                 partial = self.directory / (source.stem + ".partial.mp4")
                 if output.exists() or partial.exists():
                     raise RuntimeError("A render output already exists; refusing to overwrite it.")
+                codec_options = ["-preset", "fast", "-crf", "19"]
+                audio_kbps = 192
+                if self.target_size != "original":
+                    _, audio_kbps, codec_options = calculate_target_encoding(duration, "libx264", target_budget(self.target_size, duration))
                 command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-n", "-filter_complex_threads", "2",
                            "-i", str(source), "-stream_loop", "-1", "-ss", f"{self.timeline % length:.6f}",
                            "-i", str(playlist), "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
-                           "-t", f"{duration:.6f}", "-c:v", "libx264", "-threads", "2", "-preset", "fast",
-                           "-crf", "19", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k",
+                           "-t", f"{duration:.6f}", "-c:v", "libx264", "-threads", "2", *codec_options,
+                           "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", f"{audio_kbps}k",
                            "-movflags", "+faststart", str(partial)]
                 self.state = "rendering"
                 self._status(order)
