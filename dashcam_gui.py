@@ -18,6 +18,7 @@ from tkinter import filedialog, messagebox, ttk
 from dashcam_history import DownloadHistory
 from dashcam_paths import APP_DIR, DATA_DIR
 from dashcam_power import KeepAwake
+from dashcam_recycle import plan_recycle, recycle_plan
 from dashcam_camera_ui import CameraPanel
 from dashcam_stitch import Clip, group_drives, output_name, scan_clips
 
@@ -271,6 +272,7 @@ class DashcamGUI(tk.Tk):
         menu.add_command(label="Refresh library", command=self._refresh_drives)
         menu.add_command(label="Open selected folder", command=self._open_selected)
         menu.add_separator()
+        menu.add_command(label="Delete selected captures...", command=self._delete_captures)
         menu.add_command(label="Delete selected source clips…", command=self._delete_sources)
         menu.add_command(label="Delete selected MP4s…", command=self._delete_mp4s)
         menu.add_command(label="Delete selected partials…", command=self._delete_partials)
@@ -569,21 +571,104 @@ class DashcamGUI(tk.Tk):
         self._refresh_drives()
 
     def _media_edit_allowed(self):
-        panel = self.camera_panel
-        if self.task_running or any(job and job.active for job in (panel.capture, panel.renderer, panel.finalizer)):
+        if self._media_jobs_active():
             messagebox.showinfo("Media in use", "Finish capture, rendering, export or transfer before changing library files.")
             return False
         return True
 
-    def _delete_sources(self) -> None:
+    def _media_jobs_active(self):
+        panel = self.camera_panel
+        return self.task_running or self.process is not None or any(
+            job and job.active for job in (panel.capture, panel.renderer, panel.finalizer))
+
+    def _capture_selection(self):
+        return any(key in getattr(self, 'capture_rows', {}) or key in getattr(self, 'capture_files', {})
+                   for key in self.drive_tree.selection())
+
+    def _delete_captures(self, scope='selected'):
         if not self._media_edit_allowed():
             return
-        raw = {path for key in self.drive_tree.selection() for path in getattr(self, "capture_sources", {}).get(key, [])}
-        if raw:
-            if messagebox.askyesno("Delete selected raw captures?", f"Permanently delete {len(raw)} selected local raw segment(s)? Rendered files remain. Missing sources prevent future session finalization.", icon="warning"):
-                for path in raw:
-                    path.unlink(missing_ok=True)
-                self._refresh_drives()
+        root = Path(self.camera_panel.destination.get()).absolute()
+        paths = []
+        try:
+            for key in self.drive_tree.selection():
+                session = getattr(self, 'capture_rows', {}).get(key)
+                media = getattr(self, 'capture_files', {}).get(key)
+                if not session and not media:
+                    raise ValueError('Select only capture sessions or their expanded files. Transferred drives use the other delete actions.')
+                if scope == 'raw':
+                    paths.extend(getattr(self, 'capture_sources', {}).get(key, []))
+                elif scope == 'mp4':
+                    paths.extend(self.mp4_rows.get(key, []))
+                else:
+                    paths.append(session or media)
+            items = plan_recycle(root, paths)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Cannot recycle selection', str(exc))
+            return
+        if not self._confirm_capture_recycle(root, items):
+            self.status.set('Recycling cancelled. No files changed.')
+            return
+        # Confirmation runs a nested event loop; recheck jobs and path identity.
+        try:
+            moved, failures = recycle_plan(root, items, is_busy=self._media_jobs_active)
+            message = f'Moved {len(moved)} complete selection(s) to Recycle Bin.'
+            if failures:
+                message += ' Processing stopped. Check the listed item and Recycle Bin; unattempted selections were left in place.\n' + '\n'.join(f'{path.name}: {reason}' for path, reason in failures)
+                messagebox.showerror('Recycling incomplete', message)
+        except (OSError, ValueError) as exc:
+            message = 'Recycling stopped: ' + str(exc)
+            messagebox.showerror('Cannot recycle selection', message)
+        self._refresh_drives()
+        self.drive_tree.selection_remove(*self.drive_tree.selection())
+        modes = ('1gbh', '2gbh', '4gbh', '8gbh', 'original')
+        self._size_changed(modes.index(self.output_mode.get()) if self.output_mode.get() in modes else 4)
+        self.status.set(message)
+        self._append('RECYCLE: ' + message + '\n')
+
+    def _confirm_capture_recycle(self, root, items):
+        dialog = tk.Toplevel(self)
+        dialog.title('Move captures to Recycle Bin?')
+        dialog.transient(self)
+        dialog.geometry('920x620')
+        dialog.minsize(800, 560)
+        outer = ttk.Frame(dialog, padding=16)
+        outer.pack(fill='both', expand=True)
+        ttk.Label(outer, text='Move the following selection to Recycle Bin?', font=('Segoe UI', 12, 'bold')).pack(anchor='w')
+        ttk.Label(outer, text=f'Capture folder: {root}', wraplength=850).pack(anchor='w', pady=(6, 12))
+        frame = ttk.Frame(outer); frame.pack(fill='both', expand=True)
+        table = ttk.Treeview(frame, columns=('kind', 'path', 'files', 'size'), show='headings', height=6)
+        for key, title, width in (('kind', 'Scope', 170), ('path', 'Path within capture folder', 460), ('files', 'Files', 50), ('size', 'Size', 80)):
+            table.heading(key, text=title)
+            table.column(key, width=width, stretch=key == 'path')
+        scroll = ttk.Scrollbar(frame, command=table.yview)
+        horizontal = ttk.Scrollbar(frame, orient='horizontal', command=table.xview)
+        horizontal.pack(side='bottom', fill='x')
+        table.configure(yscrollcommand=scroll.set, xscrollcommand=horizontal.set)
+        table.column('path', width=max(460, max(len(str(item.path.relative_to(root))) for item in items) * 8), stretch=False)
+        scroll.pack(side='right', fill='y'); table.pack(fill='both', expand=True)
+        for item in items:
+            table.insert('', 'end', values=(item.kind, str(item.path.relative_to(root)), item.file_count, self._human(item.size)))
+        ttk.Label(outer, text='Entire sessions include all raw, rendered, final and support files inside that folder.\nIndividual files leave the rest of the session intact. Removing raw or rendered segments can prevent future finalization.\nCamera files and download history are unchanged. If recycling is unavailable, the operation stops.', wraplength=860).pack(anchor='w', pady=12)
+        answer = [False]
+        def confirm():
+            answer[0] = True
+            dialog.destroy()
+        buttons = ttk.Frame(outer); buttons.pack(fill='x')
+        cancel = ttk.Button(buttons, text='Cancel', command=dialog.destroy)
+        cancel.pack(side='right')
+        ttk.Button(buttons, text='Move to Recycle Bin', command=confirm).pack(side='right', padx=8)
+        dialog.bind('<Escape>', lambda event: dialog.destroy())
+        dialog.protocol('WM_DELETE_WINDOW', dialog.destroy)
+        dialog.grab_set(); cancel.focus_set()
+        self.wait_window(dialog)
+        return answer[0]
+
+    def _delete_sources(self) -> None:
+        if self._capture_selection():
+            self._delete_captures(scope='raw')
+            return
+        if not self._media_edit_allowed():
             return
         drives = [drive for drive in self._selected_drives() if drive]
         if not drives:
@@ -614,6 +699,9 @@ class DashcamGUI(tk.Tk):
         self._refresh_all()
 
     def _delete_mp4s(self) -> None:
+        if self._capture_selection():
+            self._delete_captures(scope='mp4')
+            return
         if not self._media_edit_allowed():
             return
         paths = [
@@ -750,6 +838,7 @@ class DashcamGUI(tk.Tk):
                 self.partial_rows[key] = [partial]
             self.capture_rows = {}
             self.capture_sources = {}
+            self.capture_files = {}
             root = Path(self.camera_panel.destination.get())
             for folder in sorted(root.glob("Capture_*")):
                 if not folder.is_dir():
@@ -772,6 +861,7 @@ class DashcamGUI(tk.Tk):
                 self.capture_sources[key] = raw
                 for index, path in enumerate([*raw, *rendered, *final]):
                     child = f"{key}-file-{index}"
+                    self.capture_files[child] = path
                     kind = "Raw capture" if path.suffix == ".mkv" else "Final MP4" if path in final else "Rendered segment"
                     self.drive_tree.insert(key, "end", iid=child, values=(path.name, kind, 1, self._human(path.stat().st_size), "", ""))
                     self.drive_rows[child] = []
