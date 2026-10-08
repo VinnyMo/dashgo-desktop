@@ -8,6 +8,7 @@ import unittest
 import hashlib
 import array
 import math
+from unittest.mock import patch
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -89,6 +90,22 @@ class OverlayIntegration(unittest.TestCase):
                 self.assertEqual(hashlib.sha256(finalizer.output.read_bytes()).hexdigest(), original_final)
                 self.assertEqual(segment_hashes, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in renderer.directory.glob("part_*.mp4")})
                 self.assertEqual(before, {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in root.glob("*.mkv")})
+                # A new, verified export may recycle only its generated inputs.
+                # This fixture uses a recoverable rename target, never user media.
+                trash = root / 'FixtureTrash'; trash.mkdir()
+                def recycle(path, validate):
+                    validate(); path.rename(trash / str(len(list(trash.iterdir()))))
+                with patch('dashcam_cleanup.recycle_windows', side_effect=recycle):
+                    clean = CaptureFinalizer(root, output_root=root/'Exports', cleanup=True)
+                    clean.start(); clean.wait(30)
+                self.assertEqual(clean.state, 'finished', clean.reason)
+                self.assertEqual(clean.cleanup_result['state'], 'complete')
+                self.assertEqual(len(clean.cleanup_result['recycled']), 5)
+                self.assertTrue((music / 'Test - Synthetic.wav').exists())
+                self.assertEqual(hashlib.sha256(finalizer.output.read_bytes()).hexdigest(), original_final)
+                self.assertFalse(list(root.glob('part_*.mkv')))
+                decoded = subprocess.run([media_tool('ffmpeg'), '-v', 'error', '-xerror', '-i', str(clean.output), '-f', 'null', '-'], capture_output=True, timeout=15)
+                self.assertEqual(decoded.returncode, 0, decoded.stderr)
             finally:
                 renderer.stop()
                 renderer.wait(10)

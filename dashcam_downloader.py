@@ -59,12 +59,16 @@ def get_json(url: str, timeout: int = 15) -> dict:
 
 def gateway_candidates() -> list[str]:
     """Return IPv4 gateways from Windows' route table, independent of route priority."""
-    completed = subprocess.run(
-        ["route", "print", "-4"], capture_output=True, text=True, timeout=10,
-        encoding="utf-8", errors="replace"
-    )
+    try:
+        completed = subprocess.run(
+            ["route", "print", "-4"], capture_output=True, text=True, timeout=10,
+            encoding="utf-8", errors="replace"
+        )
+        route_table = completed.stdout if completed.returncode == 0 else ''
+    except (OSError, subprocess.TimeoutExpired):
+        route_table = ''
     candidates: list[str] = []
-    for line in completed.stdout.splitlines():
+    for line in route_table.splitlines():
         fields = line.split()
         if len(fields) >= 3 and fields[0] == "0.0.0.0" and fields[1] == "0.0.0.0":
             gateway = fields[2]

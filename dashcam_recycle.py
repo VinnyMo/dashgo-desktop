@@ -8,7 +8,8 @@ import re
 import stat
 import uuid
 
-ACTIVE = {'starting', 'recording', 'reconnecting', 'preparing', 'rendering', 'waiting', 'assembling', 'verifying'}
+ACTIVE = {'starting', 'recording', 'reconnecting', 'preparing', 'rendering', 'waiting',
+          'checking', 'assembling', 'verifying', 'cleaning', 'recycling'}
 
 
 def checked_path(path):
@@ -28,19 +29,55 @@ def session_for(root, path):
         parts = path.relative_to(root).parts
     except ValueError:
         raise ValueError('Selected item is outside the capture folder.') from None
-    if not parts or not parts[0].startswith('Capture_'):
+    external_final = bool(parts and parts[0] == 'Exports')
+    if external_final:
+        # Only individual generated final files, never the export hierarchy.
+        # The directory name maps to the original session; manifest paths are
+        # intentionally ignored, even if a record has an "output" field.
+        if (len(parts) != 4 or not re.fullmatch(r'Capture_[^/]+', parts[1])
+                or not re.fullmatch(r'Finalized_[^/]+', parts[2])
+                or parts[3] not in {'Capture.mp4', 'Capture.partial.mp4'}
+                or not path.is_file()):
+            raise ValueError('Select an individual final MP4, not an export folder.')
+        session = root / parts[1]
+    elif not parts or not parts[0].startswith('Capture_'):
         raise ValueError('Select capture sessions or their listed media files, not the library folder.')
-    session = root / parts[0]
-    if not session.is_dir():
-        raise ValueError('Capture session folder is missing.')
-    record_path = session / 'session.json'
-    checked_path(record_path)
-    record = json.loads(record_path.read_text(encoding='utf-8'))
-    if not isinstance(record, dict):
-        raise ValueError('Capture status is not a valid record. No files were changed.')
-    if record.get('state') in ACTIVE:
-        raise ValueError('This session still reports an active capture. Finish its job first.')
-    records = [session / 'Rendered' / 'render.json', *session.glob('Finalized_*/finalize.json')]
+    else:
+        session = root / parts[0]
+    # lstat distinguishes an absent source from a dangling link/junction.
+    # Permission errors also propagate instead of being interpreted as absence.
+    try:
+        session.lstat()
+    except FileNotFoundError:
+        orphan = external_final
+        if not orphan:
+            raise ValueError('Capture session folder is missing.') from None
+    else:
+        checked_path(session)
+        orphan = False
+    records = []
+    if orphan:
+        record_path = checked_path(path.parent / 'finalize.json')
+        record = json.loads(record_path.read_text(encoding='utf-8'))
+        if not isinstance(record, dict) or record.get('state') not in {'finished', 'failed', 'cancelled'}:
+            raise ValueError('This final needs a completed export status before it can be recycled.')
+    else:
+        if not session.is_dir():
+            raise ValueError('Capture session folder is missing.')
+        if os.path.lexists(session / '.export.lock'):
+            raise ValueError('This capture has an export lock. Finish its export before recycling files.')
+        record_path = session / 'session.json'
+        checked_path(record_path)
+        record = json.loads(record_path.read_text(encoding='utf-8'))
+        if not isinstance(record, dict):
+            raise ValueError('Capture status is not a valid record. No files were changed.')
+        if record.get('state') in ACTIVE:
+            raise ValueError('This session still reports an active capture. Finish its job first.')
+        records = [session / 'Rendered' / 'render.json', *session.glob('Finalized_*/finalize.json')]
+    export_group = root / 'Exports' / session.name
+    if os.path.lexists(export_group):
+        checked_path(export_group)
+        records.extend(export_group.glob('Finalized_*/finalize.json'))
     for record_path in records:
         if record_path.exists() or record_path.is_symlink():
             checked_path(record_path)
@@ -49,7 +86,7 @@ def session_for(root, path):
                 raise ValueError('Render/export status is not a valid record. No files were changed.')
             if record.get('state') in ACTIVE:
                 raise ValueError('This session still reports active rendering or export. Finish its job first.')
-    if path != session:
+    if path != session and not external_final:
         relative = path.relative_to(session).as_posix()
         allowed = (r'part_\d{6}\.mkv', r'Rendered/part_\d{6}(?:\.partial)?\.mp4',
                    r'Finalized_[^/]+/Capture(?:\.partial)?\.mp4')
@@ -122,7 +159,11 @@ def recycle_plan(root, items, *, is_busy, recycle=None):
             if is_busy():
                 raise ValueError('A media job started. Remaining items were left in place.')
             validate_item(root, item)
-            recycle(item.path, lambda: validate_item(root, item))
+            def validate_before_recycle():
+                if is_busy():
+                    raise ValueError('A media job started. Remaining items were left in place.')
+                validate_item(root, item)
+            recycle(item.path, validate_before_recycle)
             if os.path.lexists(item.path):
                 raise OSError('Windows did not recycle this item.')
             moved.append(item.path)

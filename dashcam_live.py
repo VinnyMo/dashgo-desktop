@@ -232,6 +232,8 @@ class CaptureSession:
         self.frames = queue.Queue(maxsize=1)
         self.reconnect_attempts = reconnect_attempts
         self.reconnects = 0
+        self.retry_streak = 0
+        self._healthy_since = None
         self.diagnostics = deque(maxlen=20)
         self.process = None
         self.directory = None
@@ -332,6 +334,7 @@ class CaptureSession:
                 "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
                 "segment_seconds": self.segment_seconds, "stream": self.report,
                 "capture_height_limit": self.quality, "reconnects": self.reconnects,
+                 'consecutive_retries': self.retry_streak,
                 "diagnostics": list(self.diagnostics)}
         temp = self.directory / "session.json.tmp"
         temp.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -347,6 +350,9 @@ class CaptureSession:
                     size = self.byte_count
                     if size > previous_bytes:
                         previous_bytes, last_growth = size, time.monotonic()
+                        self._record_growth(last_growth)
+                    elif time.monotonic() - last_growth > 2:
+                        self._healthy_since = None
                     if shutil.disk_usage(self.directory).free < RESERVE_BYTES:
                         self.reason = "Stopped: less than 512 MiB free. Existing segments retained."
                         self._stop.set()
@@ -360,12 +366,14 @@ class CaptureSession:
                 if self._stop.is_set():
                     self.state = "stopped" if not self.reason else "interrupted"
                     break
-                if self.reconnects < self.reconnect_attempts:
+                if self.retry_streak < self.reconnect_attempts:
                     self.state = "reconnecting"
                     self.reconnects += 1
-                    self.reason = f"Stream interrupted (exit {code}); reconnect {self.reconnects}/{self.reconnect_attempts}. A gap may be present."
+                    self.retry_streak += 1
+                    self._healthy_since = None
+                    self.reason = f"Stream interrupted (exit {code}); reconnect {self.retry_streak}/{self.reconnect_attempts} for this outage. A gap may be present."
                     self._manifest()
-                    if self._stop.wait(min(2 ** self.reconnects, 8)):
+                    if self._stop.wait(min(2 ** self.retry_streak, 8)):
                         self.state, self.reason = "stopped", ""
                         break
                     self.process.stdin.close()
@@ -389,6 +397,12 @@ class CaptureSession:
                 self._manifest()
             except OSError:
                 self.reason += " Session status could not be saved."
+
+    def _record_growth(self, now):
+        if self._healthy_since is None:
+            self._healthy_since = now
+        if now - self._healthy_since >= 30:
+            self.retry_streak = 0
 
     def _finish_process(self) -> None:
         try:
@@ -416,7 +430,7 @@ class CaptureSession:
 
     @property
     def active(self) -> bool:
-        return self.state in {"starting", "recording", "reconnecting"}
+        return self.state in {"starting", "recording", "reconnecting"} or bool(self._thread and self._thread.is_alive())
 
     @property
     def byte_count(self) -> int:

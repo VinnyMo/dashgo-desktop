@@ -51,6 +51,158 @@ class RecycleSafety(unittest.TestCase):
         self.assertTrue((self.session/'session.json').exists())
         self.assertTrue((self.session/'Rendered'/'render.json').exists())
 
+    def separate_final(self, name='Finalized_fixture'):
+        directory = self.root/'Exports'/self.session.name/name
+        directory.mkdir(parents=True)
+        (directory/'finalize.json').write_text(json.dumps({'state':'finished'}))
+        final = directory/'Capture.mp4'
+        final.write_bytes(b'generated separate final fixture')
+        return final
+
+    def test_separate_final_recycles_only_exact_file(self):
+        final = self.separate_final()
+        other = self.separate_final('Finalized_other')
+        items = plan_recycle(self.root, [final])
+        self.assertEqual(items[0].kind, 'Final export')
+        self.assertEqual(items[0].session, self.session)
+        self.assertEqual(items[0].file_count, 1)
+        moved, errors = recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        self.assertEqual(moved, [final]); self.assertFalse(errors)
+        self.assertTrue(other.exists())
+        self.assertTrue((final.parent/'finalize.json').exists())
+        self.assertTrue((self.session/'part_000000.mkv').exists())
+
+    def test_separate_final_folders_and_unlisted_files_are_rejected(self):
+        final = self.separate_final()
+        extra = final.parent/'unrelated.mp4'; extra.write_bytes(b'keep')
+        for path in (final.parent, final.parent.parent, self.root/'Exports', extra):
+            with self.subTest(path=path), self.assertRaises(ValueError):
+                plan_recycle(self.root, [path])
+
+    def test_separate_final_obeys_source_lock_and_export_state(self):
+        final = self.separate_final()
+        items = plan_recycle(self.root, [final])
+        lock = self.session/'.export.lock'; lock.write_text('fixture')
+        with self.assertRaises(ValueError):
+            recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        lock.unlink()
+        for state in ('checking', 'assembling', 'verifying', 'cleaning', 'recycling'):
+            (final.parent/'finalize.json').write_text(json.dumps({'state':state}))
+            for path in (final, self.session):
+                with self.subTest(path=path, state=state), self.assertRaises(ValueError):
+                    plan_recycle(self.root, [path])
+        self.assertTrue(final.exists())
+
+    def test_separate_final_ignores_manifest_paths_and_checks_snapshot(self):
+        final = self.separate_final()
+        outside = self.root.parent/'unrelated.mp4'; outside.write_bytes(b'keep')
+        (final.parent/'finalize.json').write_text(json.dumps({'state':'finished','output':str(outside),'session':str(outside)}))
+        items = plan_recycle(self.root, [final])
+        final.write_bytes(b'changed after confirmation')
+        with self.assertRaises(ValueError):
+            recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        self.assertEqual(outside.read_bytes(), b'keep')
+
+    def test_session_selection_does_not_cover_separate_final(self):
+        final = self.separate_final()
+        items = plan_recycle(self.root, [self.session])
+        moved, errors = recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        self.assertFalse(errors); self.assertEqual(moved, [self.session])
+        self.assertTrue(final.exists())
+
+    def test_native_validation_rechecks_busy_state(self):
+        final = self.separate_final()
+        items = plan_recycle(self.root, [final])
+        busy = False
+        def start_job(path, validate):
+            nonlocal busy
+            busy = True
+            validate()
+            self.fail('Deletion must be vetoed')
+        moved, errors = recycle_plan(self.root, items, is_busy=lambda:busy, recycle=start_job)
+        self.assertFalse(moved); self.assertTrue(errors); self.assertTrue(final.exists())
+
+    def test_separate_final_recycling_failure_retains_file(self):
+        final = self.separate_final()
+        items = plan_recycle(self.root, [final])
+        def unavailable(path, validate):
+            validate()
+            raise OSError('Recycle Bin unavailable')
+        moved, errors = recycle_plan(self.root, items, is_busy=lambda:False, recycle=unavailable)
+        self.assertFalse(moved); self.assertEqual(errors[0][0], final)
+        self.assertTrue(final.exists())
+
+    def test_separate_final_rejects_reparse_ancestor(self):
+        final = self.separate_final()
+        original = Path.lstat
+        export_group = final.parent.parent
+        def reparse(path, *args, **kwargs):
+            info = original(path, *args, **kwargs)
+            if path == export_group:
+                return SimpleNamespace(st_mode=info.st_mode, st_file_attributes=0x400)
+            return info
+        with patch.object(Path, 'lstat', reparse), self.assertRaises(ValueError):
+            plan_recycle(self.root, [final])
+
+    def test_orphan_final_uses_terminal_record_without_following_metadata(self):
+        final = self.separate_final()
+        self.session.rename(self.trash/'source')
+        (final.parent/'finalize.json').write_text(json.dumps({
+            'state':'finished', 'session':'../../unrelated', 'output':'../../unrelated.mp4'}))
+        items = plan_recycle(self.root, [final])
+        moved, errors = recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        self.assertEqual(moved, [final]); self.assertFalse(errors)
+        self.assertTrue((final.parent/'finalize.json').exists())
+
+    def test_orphan_final_requires_valid_terminal_metadata(self):
+        final = self.separate_final()
+        self.session.rename(self.trash/'source')
+        record = final.parent/'finalize.json'
+        record.unlink()
+        with self.assertRaises(OSError): plan_recycle(self.root, [final])
+        for value in ('invalid json', '[]', '{}', '{"state":"checking"}',
+                      '{"state":"cleaning"}', '{"state":"unknown"}'):
+            record.write_text(value)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                plan_recycle(self.root, [final])
+        for state in ('failed', 'cancelled', 'finished'):
+            record.write_text(json.dumps({'state':state}))
+            self.assertEqual(len(plan_recycle(self.root, [final])), 1)
+        self.assertTrue(final.exists())
+
+    def test_mixed_source_and_separate_final_selection_finishes(self):
+        final = self.separate_final()
+        other = self.separate_final('Finalized_other')
+        items = plan_recycle(self.root, [self.session, final])
+        moved, errors = recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        self.assertEqual(moved, [self.session, final]); self.assertFalse(errors)
+        self.assertTrue(other.exists())
+
+    def test_orphan_final_rejects_dangling_source_link(self):
+        import stat
+        final = self.separate_final()
+        self.session.rename(self.trash/'source')
+        original = Path.lstat
+        def dangling(path, *args, **kwargs):
+            if path == self.session:
+                return SimpleNamespace(st_mode=stat.S_IFLNK, st_file_attributes=0)
+            return original(path, *args, **kwargs)
+        with patch.object(Path, 'lstat', dangling), self.assertRaises(ValueError):
+            plan_recycle(self.root, [final])
+
+    def test_orphan_metadata_and_new_source_job_rechecked_before_recycling(self):
+        final = self.separate_final()
+        self.session.rename(self.trash/'source')
+        items = plan_recycle(self.root, [final])
+        (final.parent/'finalize.json').write_text(json.dumps({'state':'cleaning'}))
+        with self.assertRaises(ValueError):
+            recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        (final.parent/'finalize.json').write_text(json.dumps({'state':'finished'}))
+        self.session.mkdir(); (self.session/'.export.lock').write_text('new job')
+        with self.assertRaises(ValueError):
+            recycle_plan(self.root, items, is_busy=lambda:False, recycle=self.recycle)
+        self.assertTrue(final.exists())
+
     def test_traversal_outside_and_library_parent_rejected(self):
         for path in (self.root,self.root.parent,self.session/'..'/self.session.name):
             with self.subTest(path=path), self.assertRaises(ValueError):plan_recycle(self.root,[path])

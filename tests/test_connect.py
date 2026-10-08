@@ -6,6 +6,31 @@ from dashcam_connect import CameraConnection, ConnectionCancelled, FIRMWARE
 
 
 class ConnectTests(unittest.TestCase):
+    def test_rediscovery_uses_current_gateway_and_ignores_other_firmware(self):
+        responses = [{'result': 0, 'info': {'softver': 'other-camera', 'camnum': 1}},
+                     {'result': 0, 'info': {'softver': FIRMWARE, 'camnum': 2}}]
+        with patch('dashcam_connect.gateway_candidates', return_value=['192.168.8.1', '192.168.9.1']), patch('dashcam_connect.get_json', side_effect=responses):
+            found = CameraConnection().discover()
+        self.assertEqual(found, [{'address': 'http://192.168.9.1', 'firmware': FIRMWARE}])
+
+    def test_route_failure_preserves_known_factory_fallback(self):
+        from dashcam_downloader import gateway_candidates
+        with patch('dashcam_downloader.subprocess.run', side_effect=subprocess.TimeoutExpired('route', 10)):
+            self.assertEqual(gateway_candidates(), ['192.168.169.1'])
+
+    def test_capture_retry_budget_resets_only_after_sustained_output(self):
+        from pathlib import Path
+        from dashcam_live import CaptureSession
+        job = CaptureSession('rtsp://camera', Path('.'), {}, reconnect_attempts=3)
+        job.retry_streak = 3; job.reconnects = 7
+        job._record_growth(100); job._record_growth(110)
+        self.assertEqual(job.retry_streak, 3)
+        job._record_growth(130)
+        self.assertEqual(job.retry_streak, 0); self.assertEqual(job.reconnects, 7)
+        job.retry_streak = 1; job._healthy_since = None
+        job._record_growth(200)
+        self.assertEqual(job.retry_streak, 1)
+
     def test_constructor_does_not_discover(self):
         with patch('dashcam_connect.gateway_candidates') as gateways:
             CameraConnection()

@@ -26,6 +26,11 @@ class CameraPanel(ttk.Frame):
         self.events = queue.Queue()
         self.frames = queue.Queue(maxsize=1)
         self.connection = None
+        self.reconnect_timer = None
+        self.connection_retries = 0
+        self._preview_healthy_since = None
+        self._closing = False
+        self._last_poll = time.monotonic()
         self.candidates = []
         self.operation = False
         self.notice = ""
@@ -33,6 +38,13 @@ class CameraPanel(ttk.Frame):
         self.capture = None
         self.renderer = None
         self.finalizer = None
+        self.pending_export = None
+        self.last_capture = None
+        self.last_export = None
+        self.export_status = tk.StringVar(value='Stop capture, then Export Final. Verified exports recycle their working media.')
+        self.export_percent = tk.DoubleVar(value=0)
+        self.export_cancel_buttons = []
+        self.export_open_buttons = []
         self.render_enabled = tk.BooleanVar(value=False)
         self.report = None
         self.report_url = None
@@ -71,6 +83,8 @@ class CameraPanel(ttk.Frame):
         actions.grid(row=2, column=0, sticky="ew", pady=12)
         self.record = ttk.Button(actions, text="Start Capture", command=self._toggle_capture, style="Accent.TButton")
         self.record.pack(side="left")
+        self.export_button = ttk.Button(actions, text='Export Final', command=self._export_latest)
+        self.export_button.pack(side='left', padx=8)
         ttk.Label(actions, text="Capture quality").pack(side="left", padx=(24, 8))
         self.quality_slider = ttk.Scale(actions, from_=0, to=2, value=2, command=self._quality_changed, length=140)
         self.quality_slider.pack(side="left")
@@ -78,6 +92,9 @@ class CameraPanel(ttk.Frame):
         self.render_option = ttk.Checkbutton(actions, text="Render overlay + music (Studio quality)", variable=self.render_enabled)
         self.render_option.pack(side="right")
         ttk.Label(self, textvariable=self.state, wraplength=900).grid(row=3, column=0, sticky="ew")
+        export = ttk.Frame(self)
+        export.grid(row=4, column=0, sticky='ew', pady=(10, 0))
+        self.build_export_status(export)
         # Rarely used controls live in a settings window opened from the menu.
         self.advanced = tk.Toplevel(self)
         self.advanced.title("Live settings")
@@ -122,7 +139,7 @@ class CameraPanel(ttk.Frame):
         self._controls()
         self.after(100, self._poll)
         if getattr(app, "auto_connect", False):
-            self.after(750, self._connect)
+            self.reconnect_timer = self.after(750, lambda: self._connect(automatic=True))
 
     def _fit_preview(self, event):
         # Fit 16:9 without a surrounding frame, stretch or crop.
@@ -131,6 +148,38 @@ class CameraPanel(ttk.Frame):
         factor = max(Fraction(n, d) for d in (1, 2, 4, 5, 8) for n in range(1, d + 1) if Fraction(n, d) <= max(.125, ratio))
         self.canvas.place_configure(width=1280 * factor.numerator // factor.denominator,
                                     height=720 * factor.numerator // factor.denominator)
+
+    def build_export_status(self, parent):
+        ttk.Label(parent, textvariable=self.export_status, wraplength=860).pack(anchor='w', fill='x')
+        row = ttk.Frame(parent)
+        row.pack(fill='x', pady=5)
+        ttk.Progressbar(row, variable=self.export_percent, maximum=100).pack(side='left', fill='x', expand=True)
+        cancel = ttk.Button(row, text='Cancel export', command=self._cancel_finalize, state='disabled')
+        cancel.pack(side='left', padx=8)
+        self.export_cancel_buttons.append(cancel)
+        open_final = ttk.Button(row, text='Open final folder', command=self._open_export, state='disabled')
+        open_final.pack(side='left')
+        self.export_open_buttons.append(open_final)
+
+    def _open_export(self):
+        if self.last_export and self.last_export.is_file():
+            self.app._open(self.last_export.parent)
+        else:
+            self._export_message('No completed export in this app session. Saved finals are listed in Studio.')
+
+    def _export_message(self, message):
+        if len(message) > 300:
+            message = message[:270] + '... See Tools > Logs.'
+        self.export_status.set(message)
+        self.state.set(message)
+        if hasattr(self.app, 'status'):
+            self.app.status.set(message.splitlines()[0][:120])
+
+    def _export_latest(self):
+        if self.last_capture:
+            self.finalize_path(self.last_capture)
+        else:
+            self._export_message('Select a saved capture in Studio, or start a new capture.')
 
     def _quality_changed(self, value):
         quality = (360, 480, 720)[min(2, max(0, round(float(value))))]
@@ -147,7 +196,16 @@ class CameraPanel(ttk.Frame):
         self.advanced.deiconify()
         self.advanced.lift()
 
-    def _connect(self, manual=False):
+    def _connect(self, manual=False, automatic=False):
+        if self.reconnect_timer:
+            self.after_cancel(self.reconnect_timer)
+            self.reconnect_timer = None
+        if not automatic:
+            self.connection_retries = 0
+        if self._closing:
+            return
+        if automatic and (self.operation or any(job and job.active for job in (self.capture, self.renderer, self.finalizer)) or self.pending_export or getattr(self.app, 'task_running', False)):
+            return
         if self.preview is not None:
             self._stop_preview()
         if not self._available():
@@ -182,10 +240,27 @@ class CameraPanel(ttk.Frame):
         threading.Thread(target=work, daemon=True).start()
 
     def _cancel_connect(self):
+        if self.reconnect_timer:
+            self.after_cancel(self.reconnect_timer)
+            self.reconnect_timer = None
+            self.state.set('Automatic connection retry cancelled. Use Attempt to reconnect when ready.')
         if self.connection:
             self.connection.cancel()
             self.state.set("Cancelling connection; waiting for the current request to finish.")
             self.cancel_connect.configure(state="disabled")
+
+    def _schedule_reconnect(self):
+        if not getattr(self.app, 'auto_connect', False) or self._closing or self.reconnect_timer or self.candidates:
+            return
+        if self.connection_retries >= 3:
+            self.state.set('Camera unavailable after three retries. Join camera Wi-Fi and choose Attempt to reconnect.')
+            return
+        self.connection_retries += 1
+        delay = min(2 ** self.connection_retries, 8)
+        self.state.set(f'Camera disconnected. Discovering its current address again in {delay}s ({self.connection_retries}/3). Capture stays off.')
+        self.reconnect_timer = self.after(delay * 1000, lambda: self._connect(automatic=True))
+        if hasattr(self.app, '_append'):
+            self.app._append('CONNECTION: ' + self.state.get() + '\n')
 
     def _placeholder(self):
         if self.image is None:
@@ -196,7 +271,7 @@ class CameraPanel(ttk.Frame):
 
     @property
     def busy(self):
-        return self.operation or self.preview is not None or (self.capture and self.capture.active) or (self.renderer and self.renderer.active) or (self.finalizer and self.finalizer.active)
+        return self.operation or self.pending_export or self.preview is not None or (self.capture and self.capture.active) or (self.renderer and self.renderer.active) or (self.finalizer and self.finalizer.active)
 
     def _available(self):
         if self.app.process is not None or getattr(self.app, "task_running", False) or self.busy:
@@ -255,6 +330,7 @@ class CameraPanel(ttk.Frame):
             self.preview = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                             stderr=subprocess.DEVNULL, creationflags=CREATE_NO_WINDOW)
             process = self.preview
+            self._preview_healthy_since = None
             self.state.set("Previewing · display scaled to 640 × 360 · audio muted")
             self._controls()
             def read_frames():
@@ -290,6 +366,9 @@ class CameraPanel(ttk.Frame):
         self._controls()
 
     def _record(self):
+        if self.reconnect_timer:
+            self.after_cancel(self.reconnect_timer)
+            self.reconnect_timer = None
         if self.preview is not None:
             self._stop_preview()
         if not self._available() or not self._verified():
@@ -306,6 +385,11 @@ class CameraPanel(ttk.Frame):
             session = CaptureSession(self.report_url, Path(self.destination.get()), self.report, quality=self.quality.get(), preview=True, reconnect_attempts=3)
             session.start()
             self.capture = session
+            self.last_capture = session.directory
+            self.export_percent.set(0)
+            self.export_status.set('Capture running. Stop Capture, then Export Final. Working media is recycled only after verification.')
+            if hasattr(self.app, '_append'):
+                self.app._append(f'CAPTURE: Started {session.directory}; PC height limit {self.quality.get()}p; background rendering {bool(render_settings)}.\n')
             if render_settings:
                 try:
                     self.renderer = BackgroundRenderer(session, *render_settings, target_size=self.app.output_mode.get())
@@ -319,6 +403,8 @@ class CameraPanel(ttk.Frame):
     def _stop_record(self):
         if self.capture:
             self.capture.stop()
+            if hasattr(self.app, '_append'):
+                self.app._append('CAPTURE: Stop requested; closing the current segment.\n')
             self.state.set("Stopping recording and closing the current segment…")
             self.stop_record.configure(state="disabled")
 
@@ -337,25 +423,44 @@ class CameraPanel(ttk.Frame):
         self.finalize_path(Path(selected))
 
     def finalize_path(self, selected):
-        if self.capture and self.capture.active or self.finalizer and self.finalizer.active:
-            self.state.set("Stop capture and wait for the current export first.")
+        selected = Path(selected)
+        if self.app.process is not None or getattr(self.app, 'task_running', False) or self.capture and self.capture.active or self.finalizer and self.finalizer.active or self.pending_export:
+            self._export_message('Stop capture and wait for the current task first.')
             return
-        self.finalizer = CaptureFinalizer(Path(selected), recover=True,
-            raw_only=not (Path(selected) / "Rendered" / "render.json").exists(),
-            target_size=self.app.output_mode.get() if hasattr(self.app, "output_mode") else "original")
+        if self.renderer and self.renderer.active:
+            if self.renderer.capture.directory != selected:
+                self._export_message('Finish rendering the current capture first.')
+                return
+            self.pending_export = selected
+            self.export_percent.set(0)
+            self._export_message('Export queued. Finishing background rendering; you can cancel the queued export.')
+            self._controls()
+            return
+        self.export_percent.set(0)
+        self.finalizer = CaptureFinalizer(selected, recover=True,
+            raw_only=not (selected / 'Rendered' / 'render.json').exists(),
+            target_size=self.app.output_mode.get() if hasattr(self.app, 'output_mode') else 'original',
+            output_root=selected.parent / 'Exports' / selected.name, cleanup=True)
         self.finalizer.start()
-        self.state.set("Checking completed capture segments…")
+        self._export_message('Checking completed capture segments. Export progress appears here.')
         self._controls()
 
     def _cancel_finalize(self):
+        if self.pending_export:
+            self.pending_export = None
+            self._export_message('Queued export cancelled. Rendering continues; sources retained.')
+            self._controls()
         if self.finalizer:
             self.finalizer.stop()
-            self.cancel_finalize_button.configure(state="disabled")
+            self._export_message(self.finalizer.message)
+            self.cancel_finalize_button.configure(state='disabled')
 
     def _browse(self):
         selected = filedialog.askdirectory(initialdir=self.destination.get())
         if selected:
             self.destination.set(selected)
+            if hasattr(self.app, '_refresh_drives'):
+                self.app._refresh_drives()
 
     def _controls(self):
         if hasattr(self.app, 'keep_awake') and hasattr(self.app, 'power_status'):
@@ -385,7 +490,23 @@ class CameraPanel(ttk.Frame):
         for entry in (self.stream_entry, self.folder_entry, self.address_entry):
             entry.configure(state="disabled" if busy else "normal")
 
+        storage_busy = self.operation or any(job and job.active for job in (self.capture, self.renderer, self.finalizer)) or self.pending_export or getattr(self.app, 'task_running', False)
+        self.folder_entry.configure(state='disabled' if storage_busy else 'normal')
+        self.browse.configure(state='disabled' if storage_busy else 'normal')
+        self.export_button.configure(state='normal' if self.last_capture and not capturing and not self.pending_export and not (self.finalizer and self.finalizer.active) else 'disabled')
+        for button in self.export_cancel_buttons:
+            button.configure(state='normal' if self.pending_export or self.finalizer and self.finalizer.active else 'disabled')
+        for button in self.export_open_buttons:
+            button.configure(state='normal' if self.last_export else 'disabled')
+
     def _poll(self):
+        now = time.monotonic()
+        gap = now - self._last_poll
+        self._last_poll = now
+        if gap > 1 and hasattr(self.app, '_append'):
+            states = ', '.join(f'{name}={job.state}' for name, job in (
+                ('capture', self.capture), ('render', self.renderer), ('export', self.finalizer)) if job)
+            self.app._append(f'UI: Update delayed {gap:.2f}s ({states or "idle/preview"}).\n')
         try:
             self._poll_once()
         finally:
@@ -404,6 +525,7 @@ class CameraPanel(ttk.Frame):
                         self.report = self.report_url = None
                         self.state.set("No live video. Check camera Wi-Fi and choose Attempt to reconnect.")
                         self._controls()
+                        self._schedule_reconnect()
                     continue
                 if kind == "progress":
                     if not self.connection or not self.connection.cancelled.is_set():
@@ -417,6 +539,10 @@ class CameraPanel(ttk.Frame):
                 if kind == "connection_error":
                     self.device.set("Not connected")
                     self.state.set(value)
+                    if hasattr(self.app, '_append'):
+                        self.app._append('CONNECTION: ' + value + '\n')
+                    if 'cancelled' not in value.lower():
+                        self._schedule_reconnect()
                 if kind == "connected":
                     if "candidates" in value:
                         self.candidates = value["candidates"]
@@ -470,6 +596,11 @@ class CameraPanel(ttk.Frame):
         try:
             source_frames = self.capture.frames if self.capture and self.capture.active else self.frames
             frame = source_frames.get_nowait()
+            if self.preview is not None:
+                now = time.monotonic()
+                self._preview_healthy_since = self._preview_healthy_since or now
+                if now - self._preview_healthy_since >= 30:
+                    self.connection_retries = 0
             if self.preview is not None or (self.capture and self.capture.active):
                 width, height = self.canvas.winfo_width(), self.canvas.winfo_height()
                 resized = resize_ppm(frame, max(16, width - width % 16), max(9, (width - width % 16) * 9 // 16))
@@ -510,20 +641,32 @@ class CameraPanel(ttk.Frame):
                 self.renderer = None
                 self._controls()
         if self.finalizer:
+            try:
+                while True:
+                    line = self.finalizer.logs.get_nowait()
+                    if hasattr(self.app, '_append'):
+                        self.app._append('EXPORT: ' + line + '\n')
+            except queue.Empty:
+                pass
+            self.export_percent.set(self.finalizer.percent)
             if self.finalizer.active:
-                self.state.set(f"Finalizing capture: {self.finalizer.state}. Source files are retained.")
+                self._export_message(self.finalizer.message)
             else:
-                if self.finalizer.state == "finished":
-                    self.state.set(f"MP4 ready: {self.finalizer.output}")
+                if self.finalizer.state == 'finished':
+                    self.last_export = self.finalizer.output
+                    if self.last_capture == self.finalizer.session:
+                        self.last_capture = None
+                    self._export_message(self.finalizer.reason or 'Final MP4 ready. Working media moved to the Recycle Bin.')
                 else:
-                    self.state.set(self.finalizer.reason or "Finalization cancelled. Source files are retained.")
-                if hasattr(self.app, "status"):
-                    self.app.status.set(self.state.get())
+                    self._export_message(self.finalizer.reason or 'Export cancelled. Source files retained.')
                 self.finalizer = None
                 self._controls()
-                if hasattr(self.app, "_refresh_drives"):
+                if hasattr(self.app, '_refresh_drives'):
                     self.app._refresh_drives()
-                    self.app.status.set(self.state.get())
+                    self.app.status.set(self.export_status.get())
+        if self.pending_export and not (self.renderer and self.renderer.active):
+            selected, self.pending_export = self.pending_export, None
+            self.finalize_path(selected)
 
         if self.capture and self.capture.state == "reconnecting":
             self.state.set(self.capture.reason)
@@ -531,6 +674,11 @@ class CameraPanel(ttk.Frame):
             self.state.set(self.state.get() + "\n" + self.notice)
 
     def shutdown(self):
+        self._closing = True
+        if self.reconnect_timer:
+            self.after_cancel(self.reconnect_timer)
+            self.reconnect_timer = None
+        self.pending_export = None
         if getattr(self, "connection", None):
             self.connection.cancel()
         self._stop_preview()

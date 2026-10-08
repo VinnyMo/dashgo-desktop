@@ -349,7 +349,7 @@ class DashcamGUI(tk.Tk):
         actions = ttk.Frame(tab)
         actions.grid(row=5, column=0, sticky="ew", pady=(10, 0))
         self.convert_button = ttk.Button(
-            actions, text="Export selected", command=self._convert
+            actions, text="Export Final", command=self._convert
         )
         self.delete_sources_button = ttk.Button(
             actions, text="Delete Selected Source Clips", command=self._delete_sources
@@ -360,6 +360,9 @@ class DashcamGUI(tk.Tk):
         )
         self.convert_button.pack(side="left")
         ttk.Button(actions, text="Open selected folder", command=self._open_selected).pack(side="left", padx=8)
+        export = ttk.Frame(tab)
+        export.grid(row=6, column=0, sticky='ew', pady=(10, 0))
+        self.camera_panel.build_export_status(export)
 
     def _size_changed(self, value):
         mode = ("1gbh", "2gbh", "4gbh", "8gbh", "original")[min(4, max(0, round(float(value))))]
@@ -475,12 +478,23 @@ class DashcamGUI(tk.Tk):
         return [self.drive_rows[item] for item in self.drive_tree.selection() if item in self.drive_rows]
 
     def _convert(self) -> None:
-        captures = [self.capture_rows[key] for key in self.drive_tree.selection() if key in getattr(self, "capture_rows", {})]
+        selection = self.drive_tree.selection()
+        captures = set()
+        for key in selection:
+            parent = key if key in getattr(self, 'capture_rows', {}) else self.drive_tree.parent(key)
+            if parent in getattr(self, 'capture_rows', {}):
+                captures.add(self.capture_rows[parent])
+        if not selection:
+            self.camera_panel._export_message('Select a capture or transferred drive to export.')
+            return
         if captures:
-            if len(captures) != 1:
+            if len(captures) != 1 or any(key not in getattr(self, 'capture_files', {}) and key not in self.capture_rows for key in selection):
                 messagebox.showinfo("Select one capture", "Export one capture at a time.")
                 return
-            self.camera_panel.finalize_path(captures[0])
+            self.camera_panel.finalize_path(next(iter(captures)))
+            return
+        if any(key.startswith('export-') for key in selection):
+            self.camera_panel._export_message('This is a completed final MP4. Use Open selected folder to view it.')
             return
         settings = self._settings()
         drives = [drive for drive in self._selected_drives() if drive]
@@ -578,7 +592,7 @@ class DashcamGUI(tk.Tk):
 
     def _media_jobs_active(self):
         panel = self.camera_panel
-        return self.task_running or self.process is not None or any(
+        return self.task_running or self.process is not None or bool(panel.pending_export) or any(
             job and job.active for job in (panel.capture, panel.renderer, panel.finalizer))
 
     def _capture_selection(self):
@@ -699,6 +713,9 @@ class DashcamGUI(tk.Tk):
         self._refresh_all()
 
     def _delete_mp4s(self) -> None:
+        if any(key.startswith('export-') for key in self.drive_tree.selection()):
+            messagebox.showinfo('Final MP4 protected', 'Final exports are kept separate from working files. Use Open selected folder to manage a final export explicitly in Explorer.')
+            return
         if self._capture_selection():
             self._delete_captures(scope='mp4')
             return
@@ -840,6 +857,11 @@ class DashcamGUI(tk.Tk):
             self.capture_sources = {}
             self.capture_files = {}
             root = Path(self.camera_panel.destination.get())
+            for index, final in enumerate(sorted(root.glob('Exports/Capture_*/Finalized_*/Capture.mp4'))):
+                key = f'export-{index}'
+                self.drive_tree.insert('', 'end', iid=key, values=(final.parent.parent.name.removeprefix('Capture_'), 'FINAL MP4', '', self._human(final.stat().st_size), 'Ready - protected', ''))
+                self.mp4_rows[key] = [final]
+                self.drive_rows[key] = []
             for folder in sorted(root.glob("Capture_*")):
                 if not folder.is_dir():
                     continue
@@ -852,6 +874,8 @@ class DashcamGUI(tk.Tk):
                     state = record.get("state", "Unknown")
                 except (OSError, ValueError):
                     state = "Status unavailable"
+                if not raw and list((root / 'Exports' / folder.name).glob('Finalized_*/Capture.mp4')):
+                    continue  # Audit metadata remains on disk; completed media has its own final row.
                 self.drive_tree.insert("", "end", iid=key, values=(folder.name.removeprefix("Capture_"), state,
                     len(raw), self._human(sum(p.stat().st_size for p in raw)),
                     f"{len(rendered)} rendered / {len(final)} final MP4s", ""))

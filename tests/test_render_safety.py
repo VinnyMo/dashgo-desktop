@@ -93,7 +93,7 @@ class RenderSafety(unittest.TestCase):
         capture = SimpleNamespace(active=True, stop=Mock(), wait=Mock(side_effect=TimeoutError()))
         renderer = SimpleNamespace(active=True, stop=Mock(), wait=Mock())
         finalizer = SimpleNamespace(active=True, stop=Mock(), wait=Mock())
-        panel = SimpleNamespace(capture=capture, renderer=renderer, finalizer=finalizer, _stop_preview=Mock())
+        panel = SimpleNamespace(capture=capture, renderer=renderer, finalizer=finalizer, _stop_preview=Mock(), reconnect_timer=None)
         with self.assertRaises(TimeoutError):
             CameraPanel.shutdown(panel)
         capture.stop.assert_called_once()

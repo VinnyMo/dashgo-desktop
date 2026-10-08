@@ -35,7 +35,7 @@ class BackgroundRenderer:
 
     @property
     def active(self):
-        return self.state in {"preparing", "rendering", "waiting"}
+        return self.state in {"preparing", "rendering", "waiting"} or bool(self._thread and self._thread.is_alive())
 
     def start(self):
         if self.state != "idle":

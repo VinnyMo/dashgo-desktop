@@ -1,4 +1,4 @@
-"""User-initiated, bounded camera connection. No startup probing."""
+"""Bounded camera discovery and verified activation; construction performs no I/O."""
 import ipaddress
 import dashcam_process as subprocess
 import threading
@@ -54,7 +54,7 @@ class CameraConnection:
             except (OSError, RuntimeError, ValueError):
                 continue
             info = response.get("info")
-            if response.get("result") == 0 and isinstance(info, dict) and info.get("softver") and info.get("camnum"):
+            if response.get("result") == 0 and isinstance(info, dict) and info.get("softver") == FIRMWARE and info.get("camnum"):
                 found.append({"address": base, "firmware": str(info["softver"])})
         self.check()
         return found

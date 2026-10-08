@@ -1,0 +1,2 @@
+# Qt Widgets frontend; verified with 6.11.0 on Windows / Python 3.14.
+PySide6>=6.11,<6.12
