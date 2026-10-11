@@ -26,9 +26,9 @@ from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
 from dashcam_desktop import Desktop, inventory
 from dashcam_live import describe_probe
 from dashcam_power import KeepAwake
-from dashcam_recycle import plan_recycle, recycle_plan, checked_path, snapshot, recycle_windows
 from dashcam_history import DownloadHistory
 from dashcam_stitch import output_name
+from dashcam_deletion import plan_deletion, recycle_deletion
 
 
 def human(value):
@@ -290,49 +290,39 @@ class Window(QMainWindow):
         if d.media_busy:raise RuntimeError('Finish capture, transfer, rendering and export before deleting files.')
         rows=self.selected()
         if not rows:raise ValueError('Select the files to delete first.')
-        capture_paths=[];other=[]
+        capture_paths=[];other=[];drive_prefixes=[]
         for row in rows:
             if row.get('session'):capture_paths.append(row['path'])
-            elif row.get('drive'):other.extend(c['path'] for c in row['children'])
+            elif row.get('drive'):
+                other.extend(c['path'] for c in row['children'])
+                drive_prefixes.append(Path(output_name(row['drive'],'original')).stem)
             else:other.append(row['path'])
-        capture_items=plan_recycle(d.capture_dir,capture_paths) if capture_paths else ()
-        other_files={}
-        if other:
-            root=checked_path(d.transfer_dir)
-            for path in set(other):
-                path=checked_path(path)
-                if not path.is_file() or not path.is_relative_to(root):raise ValueError('Selected file is outside the transfer folder.')
-                relative=path.relative_to(root)
-                if not ((len(relative.parts)==1 and path.name.endswith('_f.ts')) or (len(relative.parts)==2 and relative.parts[0]=='Drives' and (path.name.endswith('.mp4') or '.mp4.part' in path.name))):raise ValueError('This is not a listed transfer media file.')
-                other_files[path]=snapshot(path)
-        scopes=[(item.kind,item.path,item.file_count,item.size) for item in capture_items]+[('Selected file',p,1,p.stat().st_size) for p in other_files]
+        plan=plan_deletion(d.capture_dir,d.transfer_dir,capture_paths,other,drive_prefixes=drive_prefixes)
+        scopes=[(item.kind,item.path,item.file_count,item.size) for item in plan.items]
         if not self.confirm_delete(scopes):return
         def busy():return bool(d.closed or d.operation not in ('','recycle') or d.pending_export or d.process or any(j and j.active for j in (d.capture,d.renderer,d.finalizer)))
         if busy():raise RuntimeError('A media job started; no files were changed.')
         def run():
-            moved,failures=recycle_plan(d.capture_dir,capture_items,is_busy=busy) if capture_items else ([],[])
-            for path,stamp in other_files.items():
-                if failures:break
-                def validate(path=path,stamp=stamp):
-                    if busy() or snapshot(path)!=stamp:raise ValueError('Selection or job state changed; remaining files were kept.')
-                try:
-                    validate();recycle_windows(path,validate)
-                    if path.exists():raise OSError('Windows did not recycle this file.')
-                    moved.append(path)
-                    if path.name.endswith('_f.ts'):
-                        with DownloadHistory(d.transfer_dir/'.dashcam_history.sqlite3') as history:history.mark_present_by_filename(path.name,False)
-                except Exception as exc:failures.append((path,str(exc)))
+            def source_removed(path):
+                with DownloadHistory(d.transfer_dir/'.dashcam_history.sqlite3') as history:
+                    history.mark_present_by_filename(path.name,False)
+            moved,failures=recycle_deletion(plan,is_busy=busy,source_removed=source_removed)
             if failures:raise RuntimeError(f'{len(moved)} items recycled; remaining files kept. '+failures[0][1])
-            return f'{len(moved)} items moved to the Recycle Bin.'
+            return f'{len(moved)} items moved to the Recycle Bin.'+(' Folders containing unselected or unrecognized items were kept.' if plan.retained_folders else '')
         d._worker('recycle',run);d.studio_status='Moving selected files to the Recycle Bin.'
 
     def confirm_delete(self,scopes):
         dialog=QDialog(self);dialog.setWindowTitle('Move selected files to the Recycle Bin?');dialog.resize(860,460)
-        layout=QVBoxLayout(dialog);layout.addWidget(self.label('Review the exact scope below. Whole capture folders include all their contents; separate final exports require their own selection.'))
+        layout=QVBoxLayout(dialog);layout.addWidget(self.label('Review the exact scope below, including owned support files and folders. Unselected videos and unrecognized files are kept; separate final exports require their own selection.'))
         table=QTreeWidget();table.setHeaderLabels(['Scope','Path','Files','Size']);table.setRootIsDecorated(False)
         table.header().setSectionResizeMode(1,QHeaderView.Stretch)
+        for index in (0,2,3):table.header().setSectionResizeMode(index,QHeaderView.ResizeToContents)
+        table.setTextElideMode(Qt.ElideMiddle)
         for kind,path,count,size in scopes:
-            item=QTreeWidgetItem(table,[kind,str(path),str(count),human(size)]);item.setToolTip(1,str(path))
+            display=str(path)
+            for label,root in (('Captures',self.desktop.capture_dir),('Transfers',self.desktop.transfer_dir)):
+                if path.is_relative_to(root):display=label+'/'+path.relative_to(root).as_posix();break
+            item=QTreeWidgetItem(table,[kind,display,str(count),human(size)]);item.setToolTip(1,str(path))
         layout.addWidget(table)
         layout.addWidget(self.label('Removing working segments can prevent another export. Camera files and original music are unchanged. No permanent deletion fallback.',True))
         buttons=QDialogButtonBox(QDialogButtonBox.Cancel);confirm=buttons.addButton('Move to Recycle Bin',QDialogButtonBox.AcceptRole)

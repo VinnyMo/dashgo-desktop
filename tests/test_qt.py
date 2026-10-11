@@ -60,7 +60,8 @@ class QtWorkflow(unittest.TestCase):
         with patch.object(self.window,'confirm_delete',return_value=False) as confirm:
             self.window.delete_selected()
         self.assertTrue(final.exists());self.assertFalse(self.desktop.media_busy)
-        self.assertEqual(confirm.call_args.args[0][0][1],final)
+        self.assertTrue(final.is_relative_to(confirm.call_args.args[0][0][1]))
+        self.assertEqual(confirm.call_args.args[0][0][2],2)
 
     def test_final_delete_exact_file_and_completion(self):
         final=self.final();sibling=final.with_name('unrelated.txt');sibling.write_text('keep')
@@ -71,16 +72,16 @@ class QtWorkflow(unittest.TestCase):
             for worker in self.desktop._workers:worker.join(3)
             self.desktop.poll()
         self.assertFalse(final.exists());self.assertTrue(sibling.exists())
-        self.assertIn('1 items moved',self.desktop.studio_status)
+        self.assertIn('2 items moved',self.desktop.studio_status)
         self.assertTrue(self.desktop.refresh_needed)
 
     def test_close_blocks_remaining_recycle(self):
         self.final()
-        def paused(root,items,is_busy):
+        def paused(plan,*,is_busy,source_removed):
             self.desktop.closed=True
             self.assertTrue(is_busy())
-            return [],[(items[0].path,'Closed')]
-        with patch.object(self.window,'confirm_delete',return_value=True),patch('dashcam_qt.recycle_plan',side_effect=paused):
+            return [],[(plan.items[0].path,'Closed')]
+        with patch.object(self.window,'confirm_delete',return_value=True),patch('dashcam_qt.recycle_deletion',side_effect=paused):
             self.window.delete_selected()
             for worker in self.desktop._workers:worker.join(3)
             self.desktop.poll()
@@ -110,6 +111,35 @@ class QtWorkflow(unittest.TestCase):
         self.window.refresh_library()
         self.assertEqual(self.window.selected()[0]['path'],final)
         self.assertTrue(self.window.open_button.isEnabled())
+
+    def test_drive_deletion_removes_associated_files_and_updates_shared_history(self):
+        from dashcam_history import DownloadHistory
+        self.drives()
+        directory=self.desktop.transfer_dir/'Drives';directory.mkdir()
+        stem='Drive_2026-10-08_11-00-00_1GBH'
+        for name in (stem+'.mp4',stem+'.mp4.part.mp4','.'+stem+'.123.track-0.txt'):
+            (directory/name).write_bytes(b'disposable fixture')
+        database=self.desktop.transfer_dir/'.dashcam_history.sqlite3'
+        with DownloadHistory(database) as history:history.import_local_sources(self.desktop.transfer_dir)
+        self.window.refresh_library();self.window.library.topLevelItem(0).setSelected(True)
+        trash=self.root/'FixtureTrash';trash.mkdir()
+        def recycle(path,validate):validate();path.rename(trash/str(len(list(trash.iterdir()))))
+        with patch.object(self.window,'confirm_delete',return_value=True),patch('dashcam_recycle.recycle_windows',side_effect=recycle):
+            self.window.delete_selected()
+            for worker in self.desktop._workers:worker.join(3)
+            self.desktop.poll()
+        self.assertFalse(directory.exists())
+        self.assertTrue((self.desktop.transfer_dir/'2026-10-08_12_00_00_f.ts').exists())
+        with DownloadHistory(database) as history:self.assertEqual(history.stats(),(2,1,1))
+
+    def test_interrupted_transfer_is_visible_and_deletable(self):
+        directory=self.desktop.transfer_dir;directory.mkdir()
+        partial=directory/'2026-10-08_11_00_00_f.ts.part';partial.write_bytes(b'fixture')
+        self.window.refresh_library();self.window.library.topLevelItem(0).setSelected(True)
+        self.assertEqual(self.window.selected()[0]['kind'],'Partial transfer')
+        with patch.object(self.window,'confirm_delete',return_value=False) as confirm:self.window.delete_selected()
+        self.assertEqual(confirm.call_args.args[0][0][1],partial)
+        self.assertTrue(partial.exists())
 
 
 if __name__=='__main__':unittest.main()

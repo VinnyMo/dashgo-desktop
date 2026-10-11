@@ -437,4 +437,5 @@ def inventory(desktop):
     for path in sorted((desktop.transfer_dir/'Drives').glob('*.mp4')):
         if path not in represented and '.mp4.part' not in path.name:rows.append(file_row(path,'Drive MP4'))
     for path in sorted((desktop.transfer_dir/'Drives').glob('*.mp4.part*')):rows.append(file_row(path,'Partial render'))
+    for path in sorted(desktop.transfer_dir.glob('*_f.ts.part')):rows.append(file_row(path,'Partial transfer'))
     return rows
