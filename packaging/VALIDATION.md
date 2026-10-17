@@ -1,3 +1,38 @@
+# Final candidate: external Microsoft runtime and FFmpeg
+
+Binary source: cb8f7deeb763cd3620096ffb5bf5c2d3da4312de.
+Both FFmpeg/ffprobe and Microsoft Visual C++ v14 x64 runtime are user prerequisites.
+No automatic prerequisite installation, download or new agreement.
+
+- Confirmed no app-local Microsoft runtime DLLs and no FFmpeg executables.
+- 629 Microsoft runtime import symbols across 49 packaged importers match the
+  exports of five installed x64 System32 runtime DLLs, version14.51.36247.0.
+  This read-only PE check covers Python/Qt dependencies without loading the GUI.
+- Both packaged Python console helper entry points passed --help with a
+  system-only PATH and no app-local Microsoft runtime DLLs.
+- 130 retained Qt/Shiboken files match official wheel hashes; eight wheel
+  runtime copies and two CPython runtime copies were excluded.
+- Both archive CRC checks passed. Expanded program folder:102,164,390 bytes.
+- GUI was NOT launched. Current GUI SHA256:
+  7936983cf40c74122ed7466c1b54b96df0dfbfb969241eb83aa6863c5368e445.
+  Prior candidate was blocked by VerifiedAndReputableDesktop/Smart App Control.
+  No security changes, unblock or repeated GUI launch were attempted.
+- ZIP:41,493,793 bytes; SHA256:
+  288fc965f0f574c778069a5075326f2adbd728971d55d01247319deb60ab379d.
+- Source-review ZIP:121,764,278 bytes; SHA256:
+  c6195e3d2c74834ce3f50bbd62b651395ca41568154c650143f8ded14281f1c2.
+
+The specific Qt Microsoft-DLL redistribution question is avoided because those
+DLLs are not shipped. Python's existing binary license for linked-in code is
+retained. Remaining checks: unsigned-app distribution/Smart App Control handling,
+GUI startup and visual review, clean Windows with official prerequisites, owner
+approval before publishing. Static import checks are not a GUI launch test.
+No full suite or media-render repeat was necessary for DLL exclusion alone.
+
+The following results concern the previous external-FFmpeg candidate only.
+
+---
+
 # Release 0.1 current candidate validation
 
 Binary source commit: 6e5039e07358ad9612d88789dd6945e2cbfe2620.
