@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 import importlib.metadata as metadata
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,12 @@ ROOT = Path(__file__).resolve().parent.parent
 subprocess.run(['git', 'diff', '--exit-code', 'HEAD'], cwd=ROOT, check=True)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 subprocess.run([sys.executable, str(ROOT/'packaging/make_icon.py')], check=True, cwd=ROOT)
-subprocess.run([sys.executable, '-m', 'PyInstaller', '--noconfirm', 'packaging/dashgo.spec'], check=True, cwd=ROOT)
+build_env = os.environ.copy()
+# Do not discover DLLs from unrelated applications on the host PATH.
+build_env['PATH'] = os.pathsep.join([str(Path(sys.executable).parent),
+    str(Path(os.environ['SystemRoot'])/'System32'), os.environ['SystemRoot']])
+subprocess.run([sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', 'packaging/dashgo.spec'],
+               check=True, cwd=ROOT, env=build_env)
 package = ROOT/'dist/DashGo-0.1.0-windows-x64'
 licenses = package/'licenses'
 licenses.mkdir(exist_ok=True)
@@ -35,7 +41,7 @@ for name in ('LGPL-3.0.txt', 'GPL-3.0.txt'):
 inventory = {str(p.relative_to(package)): hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
              for p in sorted(package.rglob('*')) if p.is_file() and p.suffix.lower() in ('.dll', '.exe', '.pyd')}
 (package/'BINARY-INVENTORY.json').write_text(json.dumps(inventory,indent=2),encoding='utf-8')
-archive = package.with_suffix('.zip')
+archive = package.with_name(package.name + '.zip')
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as out:
     for path in sorted(package.rglob('*')):
         if path.is_file() and 'Data' not in path.relative_to(package).parts:
