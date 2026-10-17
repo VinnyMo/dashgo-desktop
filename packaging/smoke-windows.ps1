@@ -37,7 +37,7 @@ try {
  }
  foreach($module in @('dashcam_downloader.py','dashcam_stitch.py')) {
   $result = & $worker -u -B $module --help
-  if ($LASTEXITCODE -ne 0 -or $result -notmatch 'usage:') { throw "Worker failed: $module" }
+  if ($LASTEXITCODE -ne 0 -or ($result -join "`n") -notmatch 'usage:') { throw "Worker failed: $module" }
  }
  Write-Output 'PASS: packaged helpers without system Python on PATH'
  Get-AuthenticodeSignature -LiteralPath $exe | Select-Object Status

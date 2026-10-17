@@ -10,6 +10,9 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
+data = ROOT/'dist/DashGo-0.1.0-windows-x64/Data'
+if data.exists() and any(data.iterdir()):
+    raise SystemExit('Preserve the existing portable Data folder before rebuilding; refusing to overwrite it.')
 subprocess.run(['git', 'diff', '--exit-code', 'HEAD'], cwd=ROOT, check=True)
 commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
 subprocess.run([sys.executable, str(ROOT/'packaging/make_icon.py')], check=True, cwd=ROOT)
