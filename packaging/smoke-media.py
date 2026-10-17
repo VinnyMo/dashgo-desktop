@@ -10,7 +10,8 @@ import tempfile
 package = Path(sys.argv[1]).resolve()
 fixture = Path(tempfile.mkdtemp(prefix='dashgo-media-review-'))
 env = os.environ.copy()
-env['PATH'] = os.pathsep.join([str(Path(env['SystemRoot'])/'System32'), env['SystemRoot']])
+system_root = os.environ['SystemRoot']
+env['PATH'] = os.pathsep.join([str(Path(system_root)/'System32'), system_root])
 for key in ('PYTHONPATH', 'PYTHONHOME', 'QT_PLUGIN_PATH', 'QML_IMPORT_PATH'):
     env.pop(key, None)
 for key in ('USERPROFILE', 'APPDATA', 'LOCALAPPDATA'):
