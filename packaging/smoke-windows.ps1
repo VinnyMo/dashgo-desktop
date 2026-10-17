@@ -15,7 +15,8 @@ $oldPath = $env:PATH
 try {
  $env:DASHGO_NO_AUTO_CONNECT = '1'
  $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
- $process = Start-Process -FilePath $exe -WorkingDirectory $env:TEMP -WindowStyle Hidden -PassThru
+ # This explicitly tests the visible application window and taskbar resources.
+ $process = Start-Process -FilePath $exe -WorkingDirectory $env:TEMP -WindowStyle Normal -PassThru
  try {
   for ($i=0; $i -lt 40; $i++) {
    Start-Sleep -Milliseconds 250

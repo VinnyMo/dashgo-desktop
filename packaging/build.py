@@ -6,7 +6,6 @@ import json
 import shutil
 import subprocess
 import sys
-import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -30,12 +29,12 @@ for name in ('PySide6', 'PySide6_Essentials', 'shiboken6', 'pyinstaller'):
     for item in dist.files or []:
         if 'license' in str(item).lower() and dist.locate_file(item).is_file():
             shutil.copy2(dist.locate_file(item), dest/Path(item).name)
-for name, url in {
-    'LGPL-3.0.txt': 'https://www.gnu.org/licenses/lgpl-3.0.txt',
-    'GPL-3.0.txt': 'https://www.gnu.org/licenses/gpl-3.0.txt',
-}.items():
-    urllib.request.urlretrieve(url, licenses/name)
+for name in ('LGPL-3.0.txt', 'GPL-3.0.txt'):
+    shutil.copy2(ROOT/'packaging/licenses'/name, licenses/name)
 (package/'BUILD-INFO.json').write_text(json.dumps({'version':'0.1.0','display_version':'Release Version 0.1','commit':commit,'python':sys.version,'architecture':'AMD64','signed':False,'distribution_status':'PRIVATE REVIEW - licensing audit incomplete'},indent=2),encoding='utf-8')
+inventory = {str(p.relative_to(package)): hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
+             for p in sorted(package.rglob('*')) if p.is_file() and p.suffix.lower() in ('.dll', '.exe', '.pyd')}
+(package/'BINARY-INVENTORY.json').write_text(json.dumps(inventory,indent=2),encoding='utf-8')
 archive = package.with_suffix('.zip')
 with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as out:
     for path in sorted(package.rglob('*')):

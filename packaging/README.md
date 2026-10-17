@@ -16,7 +16,7 @@ python -m venv .venv
 .venv\Scripts\python.exe packaging/build.py
 ```
 
-The build refuses a dirty tracked source tree. Pinning build dependencies and recording the commit makes this recipe repeatable; byte-identical reproducibility across machines has not been established. Build artifacts and SHA256SUMS.txt are under dist. No hosted CI, installation or signing occurs. Downloaded license text must be available during build. PyInstaller uses separate GUI and console worker executables to preserve existing pipe and Windows Job ownership behavior. Qt DLLs remain external and replaceable under _internal/PySide6; replace compatible DLLs together, or rebuild from source with a modified Qt/PySide installation. No integrity check prevents replacement. Unused Qt PDF, QML, Quick and VirtualKeyboard components are excluded.
+The build refuses a dirty tracked source tree. Pinning build dependencies and recording the commit makes this recipe repeatable; byte-identical reproducibility across machines has not been established. Build artifacts and SHA256SUMS.txt are under dist. No hosted CI, installation or signing occurs. GPL/LGPL texts are checked in from qt/qtbase v6.11.0 LICENSES; the build does not download them. PyInstaller uses separate GUI and console worker executables to preserve existing pipe and Windows Job ownership behavior. Qt DLLs remain external and replaceable under _internal/PySide6; replace compatible DLLs together, or rebuild from source with a modified Qt/PySide installation. No integrity check prevents replacement. Unused Qt PDF, QML, Quick and VirtualKeyboard components are excluded.
 
 ## Distribution gate — private review only
 
