@@ -1,40 +1,43 @@
-# Release 0.1 local validation
+# Release 0.1 current candidate validation
 
-Current candidate: external user-installed FFmpeg/ffprobe. The historical
-all-in-one checks below do not describe the current package contents.
-Targeted prerequisite/startup/render checks are recorded in the final handoff.
+Binary source commit: 6e5039e07358ad9612d88789dd6945e2cbfe2620.
+Host: VANLIFE, Windows 11 x64. FFmpeg/ffprobe are external prerequisites.
 
-Host: VANLIFE, Windows 11 Pro 10.0.26300 x64. No camera was connected by the
-checks, and the original installed app/media were not changed.
+- Six targeted packaging/discovery tests passed: portable data/helper paths,
+  source interpreter, frozen PATH discovery, explicit override, missing-tool
+  instructions and Gyan WinGet fallback.
+- Fresh ZIP extraction under a path with spaces passed the packaged missing-
+  FFmpeg check with Windows-only PATH and isolated profile environment. It
+  reported the installation command, returned failure and created no output.
+- GUI startup was BLOCKED by Windows Application Control before app startup.
+  CodeIntegrity events3077 and3033 identify DashGo.exe failing the Enterprise
+  signing-level/code-integrity policy. No policy settings were changed and no
+  alternate launch route was attempted to evade it. Current GUI/taskbar startup
+  is therefore unverified, despite passing on the earlier candidate.
+- The packaged console helper passed a four-second synthetic H.264/AAC export
+  with external FFmpeg/ffprobe9.0.2 Essentials on PATH: gated worker, music,
+  overlays, short full decode and source hash preservation. No camera or user
+  media was used. This is not a clean Windows VM test.
+- Both ZIP CRC checks passed; no FFmpeg/ffprobe executable, vendor manifest,
+  license directory or source archive entries are in either current ZIP or
+  the application source tar. All138 official Qt/Shiboken file hashes matched.
+- Binary ZIP:42,224,761 bytes; expanded package:104,042,685 bytes.
+  SHA256:83168dd337996f22b7567b9e21bcd676b4c08900dba160537958614d7bd75139.
+- Source-review ZIP:121,752,931 bytes.
+  SHA256:96342bae787eaebadaf9a811d0636f541ab222c1974edad4286bbe22311724e8.
 
-- 24 focused source tests passed during initial packaging (6 owned-job, 11 Qt,
-  5 power/path, 2 portable path tests). The expanded packaging test file now has
-  3 passing tests, including bundled FFmpeg preference and refusal to fall back
-  to a host installation when the bundled tools are missing.
-- The all-in-one ZIP was extracted into a fresh workspace directory with spaces
-  in its name. Startup used an unrelated working directory, Windows-only PATH,
-  isolated USERPROFILE/APPDATA/LOCALAPPDATA directories, and cleared Python/Qt
-  import/plugin overrides. Camera auto-connect was disabled for this test.
-- Native release window title, small/large icon handles, clean close and both
-  packaged CLI helper entry points passed. ICO frames include 16, 24, 32, 48,
-  64, 128 and 256 pixels. Taskbar visual/pinned-shortcut review remains pending.
-- A four-second synthetic 320x180 H.264 clip plus generated sine-wave music was
-  processed by the packaged gated worker and stitcher without an explicit
-  FFmpeg override. Bundled ffprobe verified H.264/AAC streams, bundled FFmpeg
-  fully decoded the short output, and the original synthetic clip hash matched.
-  This checks bundled tool discovery, worker routing, music, overlays and
-  rendering without a real capture or existing media.
-- The executable is NotSigned. Actual downloaded-file SmartScreen reputation
-  and a separate clean Windows VM have not been tested.
+Earlier focused tests and icon checks are historical evidence, not a successful
+GUI startup result for this newly rebuilt executable. No full suite repeated.
+No real capture, installer/uninstaller, installation replacement, paid signing,
+new agreement, provider contact, hosted CI, public release or merge occurred.
 
-This is an isolated profile-environment test on a development machine, not a
-new Windows user account or a clean-machine test. Windows system libraries and
-Arial remain host-provided. No installer/uninstaller was executed. The portable
-format does not register an app or migrate/remove data; its builder refuses to
-overwrite nonempty portable Data.
+Remaining gates: resolve the observed Application Control restriction through
+an owner/admin-approved distribution path; current GUI/visual and clean-Windows
+validation; specific Qt/Shiboken Microsoft-runtime permission/terms; owner
+approval. Do not disable security policy as a workaround. FFmpeg source-contact
+and redistribution work is stopped and is no longer a release requirement.
 
-Run `packaging/smoke-windows.ps1 -Package <fresh extracted folder>` and
-`python packaging/smoke-media.py <fresh extracted folder> <external ffmpeg.exe>` for the focused
-checks. Synthetic fixtures and profile directories are retained in TEMP for
-inspection. Exact final artifact commit/hashes are in BUILD-INFO.json,
-BINARY-INVENTORY.json and SHA256SUMS.txt; do not infer them from this document.
+Reproduction scripts: smoke-prerequisite.py <package>, smoke-windows.ps1
+-Package <package>, smoke-media.py <package> <external ffmpeg.exe>. Each uses
+disposable fixtures; no installed app/media is changed. Exact package commit
+is BUILD-INFO.json; this post-build evidence update does not change the ZIPs.
