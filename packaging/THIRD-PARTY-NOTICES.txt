@@ -1,0 +1,61 @@
+DashGo Desktop — Release Version 0.1
+
+This application uses Qt and Qt for Python (PySide6/Shiboken) 6.11.0,
+copyright The Qt Company Ltd. and contributors, under LGPL version 3 and
+the applicable third-party licenses. Copies of LGPLv3 and GPLv3 are included
+in licenses/. You may modify/replace these LGPL libraries and debug those
+modifications. DashGo imposes no restriction on that right.
+
+Qt libraries are dynamically loaded from _internal/PySide6 and
+_internal/shiboken6. Preserve compatible library/binding versions together.
+Close the application, back up its program files and Data, replace the
+compatible libraries, then launch DashGo.exe. No signature check prevents
+replacement. Rebuild instructions and application source are available in
+the accompanying source-review archive and repository. Replacing one DLL
+with an ABI-incompatible version is not supported. A complete modified-Qt
+rebuild has not been tested.
+
+DashGo source and camera icon: MIT, copyright 2026 Vincent Mossman (LICENSE).
+CPython 3.14.4: PSF and historical licenses; see licenses/CPython-LICENSE.txt.
+Its bundled dependencies include OpenSSL 3.0.19 (Apache-2.0), libffi 3.4.4
+(MIT), SQLite 3.50.4 (public domain), bzip2 1.0.8, XZ/liblzma 5.2.5,
+zlib-ng 2.2.4 and Zstandard 1.5.7. Python's notices and additional
+version-specific notices are retained in licenses/.
+
+FFmpeg and ffprobe 9.0.2 Essentials: Gyan's GPLv3 static Windows build,
+copyright 2000–2026 the FFmpeg developers and its separately credited
+dependencies. These are separate executables, not MIT-licensed DashGo code.
+See licenses/upstream-notices/FFmpeg for the original GPL license, vendor
+README, version report and full configure line. No --enable-nonfree flag is
+present. libx264 and AAC encoding are included. The binary archive hash and
+upstream core commit are recorded in FFMPEG-MANIFEST.json.
+
+PyInstaller 6.16.0 bootloader: GPLv2-or-later with its distribution exception;
+see licenses/pyinstaller/COPYING.txt. The exception permits distribution of
+bundled applications under their own licenses; dependency obligations remain.
+
+Software OpenGL: Mesa 11.2.2 with LLVM 3.6.2 (versions identified in the
+bundled opengl32sw.dll), under its MIT/SGI and LLVM/NCSA/third-party terms.
+Version-specific license/copyright files are included in upstream-notices.
+Microsoft C/C++ runtime DLLs: copyright Microsoft Corporation; proprietary
+redistribution terms apply. They are unmodified files supplied with the
+Python/PySide distributions. Redistribution entitlement remains unverified.
+
+Qt Core/Gui/Widgets/Network/OpenGL, SVG and image-format plugins, and
+translations include third-party components. QT-ATTRIBUTIONS.json retains
+the upstream source attribution records. licenses/upstream-notices/upstream
+retains license and copyright files at their original source-relative paths.
+This collection is a superset, including notices for some source-only tests
+and examples; those files do not imply that such code is shipped in DashGo.
+BINARY-INVENTORY.json identifies the files actually shipped.
+
+Source availability: the separate DashGo-0.1.0-source-review.zip contains
+the DashGo source at the build commit plus the upstream archives listed in
+SOURCE-MANIFEST.json. It is review material, NOT a claim of complete
+corresponding-source fulfillment. FFmpeg's statically linked dependency
+sources/build recipes and exact Qt wheel build provenance remain to be
+completed. Do not distribute this binary publicly until LICENSING-REVIEW.md
+gates are resolved. No unfulfilled written source offer is made here.
+
+Music and Windows Arial are not redistributed. Supply music you may use.
+All components retain their own warranty disclaimers and licensing terms.

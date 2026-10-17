@@ -44,3 +44,5 @@ dist/
 *.zip
 
 !packaging/dashgo.spec
+vendor/
+vendor-sources/

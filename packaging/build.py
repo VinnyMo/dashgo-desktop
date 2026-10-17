@@ -10,6 +10,16 @@ import sys
 import zipfile
 
 ROOT = Path(__file__).resolve().parent.parent
+source_manifest = json.loads((ROOT/'packaging/SOURCE-MANIFEST.json').read_text(encoding='utf-8'))
+for item in source_manifest:
+    source = ROOT/'vendor-sources'/item['file']
+    if hashlib.file_digest(source.open('rb'), 'sha256').hexdigest() != item['sha256']:
+        raise SystemExit(f'Unexpected source archive: {source}')
+ff_manifest = json.loads((ROOT/'packaging/FFMPEG-MANIFEST.json').read_text(encoding='utf-8'))
+ffroot = ROOT/'vendor/ffmpeg-9.0.2/ffmpeg-9.0.2-essentials_build/bin'
+for name, digest in ff_manifest['binaries'].items():
+    if hashlib.file_digest((ffroot/name).open('rb'), 'sha256').hexdigest() != digest:
+        raise SystemExit(f'Unexpected FFmpeg binary: {name}; fetch the pinned vendor archive.')
 data = ROOT/'dist/DashGo-0.1.0-windows-x64/Data'
 if data.exists() and any(data.iterdir()):
     raise SystemExit('Preserve the existing portable Data folder before rebuilding; refusing to overwrite it.')
@@ -25,6 +35,9 @@ subprocess.run([sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', '
 package = ROOT/'dist/DashGo-0.1.0-windows-x64'
 licenses = package/'licenses'
 licenses.mkdir(exist_ok=True)
+shutil.copytree(ROOT/'packaging/licenses', licenses/'upstream-notices', dirs_exist_ok=True)
+for name in ('THIRD-PARTY-NOTICES.txt', 'LICENSING-REVIEW.md', 'SOURCE-MANIFEST.json', 'FFMPEG-MANIFEST.json', 'QT-ATTRIBUTIONS.json'):
+    shutil.copy2(ROOT/'packaging'/name, package/name)
 for name in ('LICENSE', 'README.md'):
     shutil.copy2(ROOT/name, package/name)
 for name in ('README.md', 'RELEASE-NOTES.md'):
@@ -50,5 +63,15 @@ with zipfile.ZipFile(archive,'w',zipfile.ZIP_DEFLATED,compresslevel=9) as out:
         if path.is_file() and 'Data' not in path.relative_to(package).parts:
             out.write(path,path.relative_to(package.parent))
 digest=hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()
-(ROOT/'dist/SHA256SUMS.txt').write_text(f'{digest}  {archive.name}\n',encoding='ascii')
+source_zip = ROOT/'dist/DashGo-0.1.0-source-review.zip'
+application_source = subprocess.check_output(['git', 'archive', '--format=tar', commit], cwd=ROOT)
+with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_STORED) as out:
+    out.writestr('dashgo-source.tar', application_source)
+    for item in source_manifest:
+        out.write(ROOT/'vendor-sources'/item['file'], 'upstream/'+item['file'])
+    for name in ('SOURCE-MANIFEST.json', 'FFMPEG-MANIFEST.json', 'LICENSING-REVIEW.md'):
+        out.write(ROOT/'packaging'/name, name)
+source_digest = hashlib.file_digest(source_zip.open('rb'), 'sha256').hexdigest()
+(ROOT/'dist/SHA256SUMS.txt').write_text(f'{digest}  {archive.name}\n{source_digest}  {source_zip.name}\n',encoding='ascii')
 print(f'{archive}: {archive.stat().st_size} bytes; SHA256 {digest}')
+print(f'{source_zip}: {source_zip.stat().st_size} bytes; SHA256 {source_digest}')

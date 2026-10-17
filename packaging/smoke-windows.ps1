@@ -12,6 +12,18 @@ public static class DashGoWindowCheck {
 '@
 $oldConnect = $env:DASHGO_NO_AUTO_CONNECT
 $oldPath = $env:PATH
+$profileRoot = Join-Path $env:TEMP ('DashGo-review-profile-' + [guid]::NewGuid())
+New-Item -ItemType Directory -Path $profileRoot | Out-Null
+$savedEnvironment = @{}
+foreach($key in @('APPDATA','LOCALAPPDATA','USERPROFILE','PYTHONHOME','PYTHONPATH','QT_PLUGIN_PATH','QML_IMPORT_PATH')) {
+ $savedEnvironment[$key] = [Environment]::GetEnvironmentVariable($key,'Process')
+ [Environment]::SetEnvironmentVariable($key,$null,'Process')
+}
+foreach($key in @('APPDATA','LOCALAPPDATA','USERPROFILE')) {
+ $folder = Join-Path $profileRoot $key
+ New-Item -ItemType Directory -Path $folder | Out-Null
+ [Environment]::SetEnvironmentVariable($key,$folder,'Process')
+}
 try {
  $env:DASHGO_NO_AUTO_CONNECT = '1'
  $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
@@ -39,10 +51,14 @@ try {
   $result = & $worker -u -B $module --help
   if ($LASTEXITCODE -ne 0 -or ($result -join "`n") -notmatch 'usage:') { throw "Worker failed: $module" }
  }
- Write-Output 'PASS: packaged helpers without system Python on PATH'
+ Write-Output 'PASS: packaged helpers with isolated profile environment and Windows-only PATH (not a clean machine)'
  Get-AuthenticodeSignature -LiteralPath $exe | Select-Object Status
  (Get-Item -LiteralPath $exe).VersionInfo | Select-Object FileVersion,ProductVersion,FileDescription
 } finally {
  $env:DASHGO_NO_AUTO_CONNECT = $oldConnect
  $env:PATH = $oldPath
+ foreach($key in $savedEnvironment.Keys) {
+  [Environment]::SetEnvironmentVariable($key,$savedEnvironment[$key],'Process')
+ }
+ Write-Output "Disposable profile retained for inspection: $profileRoot"
 }
