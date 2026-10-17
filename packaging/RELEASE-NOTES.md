@@ -8,4 +8,8 @@ Existing Live, Transfer and Studio workflows are retained. Python 3.14.4 and PyS
 
 This is unsigned software; Windows may warn about its publisher or reputation. NEXPOW VSQ10 is the tested camera family. Rear camera, full iOS parity, persisted settings, renderer restart/resume and continuous eight-hour reliability remain unverified or unavailable. No new hardware/capture certification was performed for this release.
 
-Public release remains pending the specific Qt/Shiboken Microsoft runtime downstream permission/terms confirmation, clean-Windows validation and owner review. FFmpeg distribution/source collection is no longer a release task because its binaries are not shipped. Versioned source-review archives, notices and build provenance are supplied; these are not a completed compliance certification. GitHub Releases can host the eventual ZIP and checksums; no release is published automatically by the build.
+Public release remains pending unsigned-app policy resolution, clean-Windows validation and owner review. FFmpeg distribution/source collection is no longer a release task because its binaries are not shipped. Versioned source-review archives, notices and build provenance are supplied; these are not a completed compliance certification. GitHub Releases can host the eventual ZIP and checksums; no release is published automatically by the build.
+
+## Microsoft runtime prerequisite
+
+Install Microsoft Visual C++ v14 **X64** Redistributable **14.44.35211.0 or newer** from https://aka.ms/vc14/vc_redist.x64.exe (official instructions: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). User installation only; no runtime DLLs or installer are bundled or downloaded by DashGo. Keep any newer installed runtime. Visual Studio IDE is not required. This does not fix unsigned-app Smart App Control enforcement; no security setting changes are recommended.

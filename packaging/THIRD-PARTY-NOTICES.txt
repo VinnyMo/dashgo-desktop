@@ -32,11 +32,10 @@ bundled applications under their own licenses; dependency obligations remain.
 Software OpenGL: Mesa 11.2.2 with LLVM 3.6.2 (versions identified in the
 bundled opengl32sw.dll), under its MIT/SGI and LLVM/NCSA/third-party terms.
 Version-specific license/copyright files are included in upstream-notices.
-Microsoft C/C++ runtime DLLs: copyright Microsoft Corporation; proprietary
-redistribution terms apply. They are unmodified files supplied with the
-Python/PySide distributions. Python's binary license includes Windows redistribution conditions. The
-Qt/Shiboken runtime downstream permission/terms question is recorded in
-LICENSING-REVIEW.md; no personal paid VS license requirement is established.
+Microsoft C/C++ runtime DLLs are NOT bundled. The user installs Microsoft's
+x64 Visual C++ v14 Redistributable (14.44.35211.0 or newer) directly from
+Microsoft under its terms. Python's binary license, including its conditions
+for Microsoft code embedded by the linker, remains included and applicable.
 
 Qt Core/Gui/Widgets/Network/OpenGL, SVG and image-format plugins, and
 translations include third-party components. QT-ATTRIBUTIONS.json retains

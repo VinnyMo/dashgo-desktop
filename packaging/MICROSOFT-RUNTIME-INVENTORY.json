@@ -1,62 +1,67 @@
-[
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\VCRUNTIME140_1.dll",
-    "version": "14.42.34438.0",
-    "sha256": "6a99bc0128e0c7d6cbbf615fcc26909565e17d4ca3451b97f8987f9c6acbc6c8",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\VCRUNTIME140.dll",
-    "version": "14.42.34438.0",
-    "sha256": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\MSVCP140_1.dll",
-    "version": "14.44.35211.0",
-    "sha256": "3402e3b5d062f4959c9255c543c81ef6a8e836a13d55f887ab5c8dfeb7c904cc",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\MSVCP140_2.dll",
-    "version": "14.44.35211.0",
-    "sha256": "9af161c91b5285562e0a0b637e802da007e9b7ffcfbc5d35a846075b5446fa3e",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\MSVCP140.dll",
-    "version": "14.44.35211.0",
-    "sha256": "90a1b0709fae970fe62072b7a322ebf713a956228f99bf5b46b3bdc980290b7e",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\VCRUNTIME140_1.dll",
-    "version": "14.44.35211.0",
-    "sha256": "ccda43d3b89f251253bbcda9fdea6a1844bbb39f0f44471b4fa77fedaf56f8b8",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\VCRUNTIME140.dll",
-    "version": "14.44.35211.0",
-    "sha256": "90b16bd48994b1373cfa5fbeded5996a4e999845958a3cd04992f50b6aaf71b3",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\shiboken6\\MSVCP140.dll",
-    "version": "14.44.35211.0",
-    "sha256": "929357e3ca461248daf7a68e2dd49d44d734f28eb8f76959a2cdba3b42ddb1d6",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\shiboken6\\VCRUNTIME140_1.dll",
-    "version": "14.44.35211.0",
-    "sha256": "92aa4b4fffc5c3c7b7b52a85e665853259c25041ccf527016996622aa769b1f7",
-    "signature": "Valid"
-  },
-  {
-    "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\shiboken6\\VCRUNTIME140.dll",
-    "version": "14.44.35211.0",
-    "sha256": "9fabc4d1fd2ffbe1dbb7590d4c660fcbfc9f551a3e4233d2b70d8e6406c6a46d",
-    "signature": "Valid"
-  }
-]
+{
+  "status": "Excluded from current package; historical upstream files identified and removed",
+  "required_runtime": "Microsoft Visual C++ v14 x64 14.44.35211.0 or newer",
+  "download": "https://aka.ms/vc14/vc_redist.x64.exe",
+  "excluded_files": [
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\VCRUNTIME140_1.dll",
+      "version": "14.42.34438.0",
+      "sha256": "6a99bc0128e0c7d6cbbf615fcc26909565e17d4ca3451b97f8987f9c6acbc6c8",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\VCRUNTIME140.dll",
+      "version": "14.42.34438.0",
+      "sha256": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\MSVCP140_1.dll",
+      "version": "14.44.35211.0",
+      "sha256": "3402e3b5d062f4959c9255c543c81ef6a8e836a13d55f887ab5c8dfeb7c904cc",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\MSVCP140_2.dll",
+      "version": "14.44.35211.0",
+      "sha256": "9af161c91b5285562e0a0b637e802da007e9b7ffcfbc5d35a846075b5446fa3e",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\MSVCP140.dll",
+      "version": "14.44.35211.0",
+      "sha256": "90a1b0709fae970fe62072b7a322ebf713a956228f99bf5b46b3bdc980290b7e",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\VCRUNTIME140_1.dll",
+      "version": "14.44.35211.0",
+      "sha256": "ccda43d3b89f251253bbcda9fdea6a1844bbb39f0f44471b4fa77fedaf56f8b8",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\PySide6\\VCRUNTIME140.dll",
+      "version": "14.44.35211.0",
+      "sha256": "90b16bd48994b1373cfa5fbeded5996a4e999845958a3cd04992f50b6aaf71b3",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\shiboken6\\MSVCP140.dll",
+      "version": "14.44.35211.0",
+      "sha256": "929357e3ca461248daf7a68e2dd49d44d734f28eb8f76959a2cdba3b42ddb1d6",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\shiboken6\\VCRUNTIME140_1.dll",
+      "version": "14.44.35211.0",
+      "sha256": "92aa4b4fffc5c3c7b7b52a85e665853259c25041ccf527016996622aa769b1f7",
+      "signature": "Valid"
+    },
+    {
+      "path": "dist\\DashGo-0.1.0-windows-x64\\_internal\\shiboken6\\VCRUNTIME140.dll",
+      "version": "14.44.35211.0",
+      "sha256": "9fabc4d1fd2ffbe1dbb7590d4c660fcbfc9f551a3e4233d2b70d8e6406c6a46d",
+      "signature": "Valid"
+    }
+  ]
+}

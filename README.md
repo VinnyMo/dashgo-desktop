@@ -1,6 +1,6 @@
 # DashGo Desktop
 
-**Release Version 0.1** (tooling: `0.1.0`) is an unsigned Windows x64 **portable release candidate**. Python and Qt are included; **FFmpeg and ffprobe must be installed separately by the user**. The release is not public yet: [draft PR #1](https://github.com/VinnyMo/dashgo-desktop/pull/1), [draft release notes](packaging/RELEASE-NOTES.md), and [licensing review / publication gates](packaging/LICENSING-REVIEW.md).
+**Release Version 0.1** (tooling: `0.1.0`) is an unsigned Windows x64 **portable release candidate**. Python and Qt are included; **FFmpeg/ffprobe and Microsoft Visual C++ v14 x64 Redistributable must be installed separately by the user**. The release is not public yet: [draft PR #1](https://github.com/VinnyMo/dashgo-desktop/pull/1), [draft release notes](packaging/RELEASE-NOTES.md), and [licensing review / publication gates](packaging/LICENSING-REVIEW.md).
 
 Windows desktop prototype for NEXPOW VSQ10 live preview, direct-to-PC capture, stored-clip transfers and video exports. Python with Qt Widgets (PySide6) and FFmpeg. Independent project, not affiliated with NEXPOW or DashGo.
 
@@ -29,13 +29,33 @@ Target: **Windows 10/11 x64**, with Windows 11 x64 locally tested. Windows ARM64
 
 1. Obtain the reviewed `DashGo-0.1.0-windows-x64.zip` from the owner. There is no public download asset yet; a future GitHub Release can host it with checksums and source materials.
 2. Verify the ZIP against its `SHA256SUMS.txt`, then **Extract All** into a new, writable folder. Do not run inside the ZIP or extract over your existing DashGo installation.
-3. Install FFmpeg and ffprobe using the prerequisite instructions below, then open **DashGo.exe**. Keep `DashGoWorker.exe`, `_internal`, and the license/notice files beside it. The blue camera icon identifies the running app. This build is unsigned: Windows SmartScreen or antivirus may warn about an unknown publisher. Confirm the source and checksum before choosing to run it; do not disable security protections globally.
+3. Install both prerequisites using the instructions below, then open **DashGo.exe**. Keep `DashGoWorker.exe`, `_internal`, and the license/notice files beside it. The blue camera icon identifies the running app. This build is unsigned: Windows SmartScreen or antivirus may warn about an unknown publisher. Confirm the source and checksum before choosing to run it; do not disable security protections globally.
 4. Connect Windows to the camera Wi-Fi. DashGo discovers the supported camera and starts preview; it does not change Wi-Fi settings or start recording automatically. Use **Reconnect** if necessary.
 5. Media defaults to `Data/Captures`, `Data/Transfers`, and `Data/Music` beside the executable. Supply your own permitted music for rendered exports. Existing libraries can be selected through Options. The package does not migrate or change `Documents/Dashcam` or the old installed app.
 
 **Live:** choose capture quality and click Start Capture, then Stop Capture. **Transfer:** use Transfer clips to copy stored camera recordings. **Studio:** select a capture/drive and use Export Final; optionally configure music, overlays and the output size target first. The detailed behavior and safety limits are below.
 
 To update, extract into a new folder and explicitly choose or move your media after closing all jobs. To remove this portable app, preserve `Data` and any other media first, then remove only its program folder. There is no automatic installer/uninstaller or migration. GUI preferences still do not persist between launches.
+
+### Required: Microsoft Visual C++ runtime (x64)
+
+Install Microsoft's latest supported **Visual C++ v14 Redistributable, X64**
+from the [official download page](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist)
+([direct Microsoft installer](https://aka.ms/vc14/vc_redist.x64.exe)). This app
+requires **14.44.35211.0 or newer**. An x86-only installation is insufficient.
+Run the Microsoft installer yourself, review its terms and any Windows approval
+prompt, and restart if requested. If a newer x64 runtime is already installed,
+keep it; do not uninstall it. You do not need the Visual Studio IDE.
+
+DashGo includes neither these runtime DLLs nor their installer, and does not
+install/download them automatically. Python and Qt depend on the system runtime.
+Missing `VCRUNTIME140.dll`, `VCRUNTIME140_1.dll`, `MSVCP140.dll` or related runtime
+errors mean this prerequisite needs installation/repair through Microsoft.
+Do not download individual DLLs from third-party DLL sites.
+
+**Signing is separate:** this candidate is unsigned. Smart App Control blocked
+an earlier candidate before startup on the build machine. It may offer no
+“Run anyway” option. Installing this runtime does not resolve that policy block.
 
 ### Required: install FFmpeg and ffprobe
 
@@ -267,8 +287,8 @@ Only source, generic examples and synthetic test definitions belong in this repo
 
 Camera HTTP is unencrypted on its local Wi-Fi. Do not expose it to the Internet. Live URLs cannot embed credentials, but queries and logs may still contain sensitive information. The app has no telemetry and does not upload footage.
 
-[MIT](LICENSE), copyright 2026 Vincent Mossman, applies to DashGo source and the camera icon. Bundled dependencies retain their own licenses: Qt/PySide/Shiboken under the applicable LGPLv3 terms and third-party terms, CPython under its PSF/history licenses, and the PyInstaller bootloader under its GPL exception. Microsoft runtime and Mesa/LLVM components are also included. Music and Windows fonts are not redistributed.
+[MIT](LICENSE), copyright 2026 Vincent Mossman, applies to DashGo source and the camera icon. Bundled dependencies retain their own licenses: Qt/PySide/Shiboken under the applicable LGPLv3 terms and third-party terms, CPython under its PSF/history licenses, and the PyInstaller bootloader under its GPL exception. Mesa/LLVM components are included. Microsoft runtime DLLs are excluded and supplied by the user-installed prerequisite. Music and Windows fonts are not redistributed.
 
-Read [third-party notices](packaging/THIRD-PARTY-NOTICES.txt), the included license files, and the [licensing/source review](packaging/LICENSING-REVIEW.md). Source archives and build provenance are prepared locally for review. The remaining specific Qt/Shiboken Microsoft-runtime permission/terms question and clean-Windows/owner checks are recorded there. FFmpeg binaries, their source archives and their distribution notices are not part of this package.
+Read [third-party notices](packaging/THIRD-PARTY-NOTICES.txt), the included license files, and the [licensing/source review](packaging/LICENSING-REVIEW.md). Source archives and build provenance are prepared locally for review. The earlier Qt/Shiboken Microsoft-runtime DLL redistribution question is avoided by excluding those DLLs. Smart App Control, clean-Windows and owner checks remain. FFmpeg binaries, their source archives and their distribution notices are not part of this package.
 
 Qt DLLs remain external and replaceable. Users may modify/relink the LGPL libraries and debug those modifications; no DashGo license term prohibits that. The source and build recipe permit rebuilding the application. Externally installed FFmpeg is executed as a separate subprocess and retains its own license. No FFmpeg distribution or provider contact is performed by this release.

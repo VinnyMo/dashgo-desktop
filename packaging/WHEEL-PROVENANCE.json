@@ -45,32 +45,12 @@
         "sha256": "f14f92c99618246ee9a08632b46fc2493fb82607edb2f75318e44731ddcc7187"
       },
       {
-        "file": "PySide6/msvcp140.dll",
-        "sha256": "90a1b0709fae970fe62072b7a322ebf713a956228f99bf5b46b3bdc980290b7e"
-      },
-      {
-        "file": "PySide6/msvcp140_1.dll",
-        "sha256": "3402e3b5d062f4959c9255c543c81ef6a8e836a13d55f887ab5c8dfeb7c904cc"
-      },
-      {
-        "file": "PySide6/msvcp140_2.dll",
-        "sha256": "9af161c91b5285562e0a0b637e802da007e9b7ffcfbc5d35a846075b5446fa3e"
-      },
-      {
         "file": "PySide6/opengl32sw.dll",
         "sha256": "f67385109e5e5f195034243ab57e6d162c0ee972a58c2bd528da02d97c5aea53"
       },
       {
         "file": "PySide6/pyside6.abi3.dll",
         "sha256": "1d737937c8335025d5a3cd44fecc70000a8fd2e46bb8e1f031f2bd16cbd9b5c0"
-      },
-      {
-        "file": "PySide6/vcruntime140.dll",
-        "sha256": "90b16bd48994b1373cfa5fbeded5996a4e999845958a3cd04992f50b6aaf71b3"
-      },
-      {
-        "file": "PySide6/vcruntime140_1.dll",
-        "sha256": "ccda43d3b89f251253bbcda9fdea6a1844bbb39f0f44471b4fa77fedaf56f8b8"
       },
       {
         "file": "PySide6/plugins/generic/qtuiotouchplugin.dll",
@@ -536,6 +516,28 @@
         "file": "PySide6/translations/qtbase_zh_TW.qm",
         "sha256": "21012b2b427f8d09d31ce9cae582ca27955b478ca3dc2ec18a3068d808638c6a"
       }
+    ],
+    "excluded_runtime_files": [
+      {
+        "file": "PySide6/msvcp140.dll",
+        "sha256": "90a1b0709fae970fe62072b7a322ebf713a956228f99bf5b46b3bdc980290b7e"
+      },
+      {
+        "file": "PySide6/msvcp140_1.dll",
+        "sha256": "3402e3b5d062f4959c9255c543c81ef6a8e836a13d55f887ab5c8dfeb7c904cc"
+      },
+      {
+        "file": "PySide6/msvcp140_2.dll",
+        "sha256": "9af161c91b5285562e0a0b637e802da007e9b7ffcfbc5d35a846075b5446fa3e"
+      },
+      {
+        "file": "PySide6/vcruntime140.dll",
+        "sha256": "90b16bd48994b1373cfa5fbeded5996a4e999845958a3cd04992f50b6aaf71b3"
+      },
+      {
+        "file": "PySide6/vcruntime140_1.dll",
+        "sha256": "ccda43d3b89f251253bbcda9fdea6a1844bbb39f0f44471b4fa77fedaf56f8b8"
+      }
     ]
   },
   {
@@ -548,12 +550,14 @@
         "sha256": "5bfd3f7dad7c9dd7aaf66c4893cf5e5f073613c03a5c35c0625721556cfc5c5c"
       },
       {
-        "file": "shiboken6/msvcp140.dll",
-        "sha256": "929357e3ca461248daf7a68e2dd49d44d734f28eb8f76959a2cdba3b42ddb1d6"
-      },
-      {
         "file": "shiboken6/shiboken6.abi3.dll",
         "sha256": "7c94a10ac0b916fbf46ec7494aa578064d63636737e7081c6b969716c7dc7c9f"
+      }
+    ],
+    "excluded_runtime_files": [
+      {
+        "file": "shiboken6/msvcp140.dll",
+        "sha256": "929357e3ca461248daf7a68e2dd49d44d734f28eb8f76959a2cdba3b42ddb1d6"
       },
       {
         "file": "shiboken6/vcruntime140.dll",

@@ -30,6 +30,8 @@ subprocess.run([sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', '
 package = ROOT/'dist/DashGo-0.1.0-windows-x64'
 if any(p.name.lower() in ('ffmpeg.exe', 'ffprobe.exe') for p in package.rglob('*')):
     raise SystemExit('External-prerequisite package must not contain FFmpeg executables.')
+if any(p.suffix.lower() == '.dll' and p.name.lower().startswith(('vcruntime', 'msvcp', 'concrt', 'vcomp')) for p in package.rglob('*')):
+    raise SystemExit('Microsoft runtime DLLs must remain an external prerequisite.')
 licenses = package/'licenses'
 licenses.mkdir(exist_ok=True)
 shutil.copytree(ROOT/'packaging/licenses', licenses/'upstream-notices', dirs_exist_ok=True)
@@ -50,7 +52,7 @@ for name in ('PySide6', 'PySide6_Essentials', 'shiboken6', 'pyinstaller'):
             shutil.copy2(dist.locate_file(item), dest/Path(item).name)
 for name in ('LGPL-3.0.txt', 'GPL-3.0.txt'):
     shutil.copy2(ROOT/'packaging/licenses'/name, licenses/name)
-(package/'BUILD-INFO.json').write_text(json.dumps({'version':'0.1.0','display_version':'Release Version 0.1','commit':commit,'python':sys.version,'architecture':'AMD64','signed':False,'distribution_status':'RELEASE CANDIDATE - owner review pending','ffmpeg':'external prerequisite; not bundled'},indent=2),encoding='utf-8')
+(package/'BUILD-INFO.json').write_text(json.dumps({'version':'0.1.0','display_version':'Release Version 0.1','commit':commit,'python':sys.version,'architecture':'AMD64','signed':False,'distribution_status':'RELEASE CANDIDATE - owner review pending','ffmpeg':'external prerequisite; not bundled','msvc_runtime':'user-installed Microsoft Visual C++ v14 x64, 14.44.35211.0 or newer; not bundled'},indent=2),encoding='utf-8')
 inventory = {str(p.relative_to(package)): hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
              for p in sorted(package.rglob('*')) if p.is_file() and p.suffix.lower() in ('.dll', '.exe', '.pyd')}
 (package/'BINARY-INVENTORY.json').write_text(json.dumps(inventory,indent=2),encoding='utf-8')

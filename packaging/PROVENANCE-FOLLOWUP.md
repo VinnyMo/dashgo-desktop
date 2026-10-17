@@ -1,3 +1,22 @@
+# Current packaging decision: external Microsoft runtime
+
+The owner approved excluding all app-local Microsoft runtime DLLs. The current
+package requires user-installed Microsoft Visual C++ v14 X64 Redistributable
+14.44.35211.0 or newer, obtained directly from Microsoft. No installer is bundled
+or invoked. This removes the specific redistribution question for those DLLs;
+no Qt permission inquiry or new agreement is needed for files not distributed.
+Python's existing binary-license conditions for linked-in Microsoft code remain
+included. The records below are historical provenance, not the current file list.
+WHEEL-PROVENANCE.json separates eight excluded wheel runtime copies from the
+130 retained wheel-file matches. MICROSOFT-RUNTIME-INVENTORY.json records ten
+excluded copies. BINARY-INVENTORY.json identifies actual package contents.
+
+Remaining checks: unsigned-app/Smart App Control policy, current GUI and clean
+Windows validation with both prerequisites installed, owner review. No public
+release/merge or claim of successful current GUI startup. No security changes.
+
+---
+
 # Release 0.1 provenance follow-up — 2026-10-17
 
 The current candidate uses external user-installed FFmpeg/ffprobe. Its build

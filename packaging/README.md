@@ -21,10 +21,14 @@ The build refuses a dirty tracked source tree. Pinning build dependencies and re
 
 ## Distribution review
 
-Read [LICENSING-REVIEW.md](LICENSING-REVIEW.md) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Version-specific source archives, notices and attribution records for bundled components accompany the review deliverables. The specific Qt/Shiboken Microsoft runtime downstream permission/terms question remains recorded in the licensing review. Python's binary license explicitly describes its redistribution conditions. No personal paid Visual Studio license is established as necessary. No unfulfilled source offer is made.
+Read [LICENSING-REVIEW.md](LICENSING-REVIEW.md) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Version-specific source archives, notices and attribution records for bundled components accompany the review deliverables. The earlier runtime-DLL redistribution question is avoided by excluding those DLLs. Python's binary license explicitly describes its redistribution conditions. No personal paid Visual Studio license is established as necessary. No unfulfilled source offer is made.
 
 FFmpeg/ffprobe binaries, vendor distribution notices and source archives are excluded. The build does not fetch them. Users obtain a complete FFmpeg installation separately. No provider contact or paid license/signing was acquired.
 
 A free NSIS installer is technically possible; the portable ZIP was chosen to preserve the current installation and simplify media/uninstall safety. See the review for the tradeoff. Do not install this portable folder over the existing app.
 
 Unsigned: Windows may display SmartScreen/unknown-publisher or antivirus warnings. There is no paid signing and no certificate. Public download reputation and a clean Windows VM remain untested. The isolated-profile / stripped-PATH check is performed on VANLIFE and is not a clean-machine test.
+
+## Microsoft runtime prerequisite
+
+Install Microsoft Visual C++ v14 **X64** Redistributable **14.44.35211.0 or newer** from https://aka.ms/vc14/vc_redist.x64.exe (official instructions: https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). User installation only; no runtime DLLs or installer are bundled or downloaded by DashGo. Keep any newer installed runtime. Visual Studio IDE is not required. This does not fix unsigned-app Smart App Control enforcement; no security setting changes are recommended.
