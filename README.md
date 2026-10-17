@@ -4,6 +4,28 @@ Windows desktop prototype for NEXPOW VSQ10 live preview, direct-to-PC capture, s
 
 **Prototype:** two separate 18-minute camera capture/render/export runs passed. The owner also reports successful longer videos when the connection stays available, without a specified duration. Continuous eight-hour and moving-drive reliability remain unverified. Camera settings are read-only. There is no installer, packaged release or full iOS feature parity.
 
+## Start here
+
+Run DashGo from source using the [Windows setup](#windows-setup) below. Python, PySide6 and FFmpeg are separate prerequisites.
+
+- **Live:** preview the camera and record directly to the PC. Recording starts only when you click **Start Capture**.
+- **Transfer:** copy stored front-camera clips from the camera's SD card.
+- **Studio:** turn a live capture or transferred drive into a final MP4, with optional music for live captures and required music for transferred-drive rendering.
+
+### Contents
+
+- [Compatibility](#compatibility)
+- [Windows setup](#windows-setup)
+- [Live, Transfer and Studio](#live-transfer-and-studio)
+- [Export transferred clips](#export-transferred-clips)
+- [Music, overlays and final export](#music-overlays-and-final-export)
+- [Troubleshooting](#troubleshooting)
+- [Storage and long captures](#storage-and-long-captures)
+- [Files and installation layouts](#files-and-installation-layouts)
+- [Protocol evidence](#protocol-evidence)
+- [Tests and limitations](#tests-and-limitations)
+- [Privacy and license](#privacy-and-license)
+
 ## Compatibility
 
 | Feature | Evidence and limits |
@@ -23,12 +45,34 @@ Bitrate varies with scene and conditions. The app measures dimensions, codec, fr
 
 ## Windows setup
 
-1. Install Python 3.10 or newer. Development checks used Python 3.14 and PySide6 6.11.0. Install the Qt frontend dependency with `python -m pip install -r requirements.txt`. The legacy Tkinter interface remains available explicitly as `dashcam_gui.py`.
-2. Install a complete [FFmpeg build](https://ffmpeg.org/download.html), including `ffmpeg.exe` and `ffprobe.exe`, and add its `bin` directory to PATH. The app also detects Gyan's WinGet installation. Tests used FFmpeg 9.0; it is not installed or bundled by this app.
-3. Clone/download this source into a writable folder. Open **Launch DashGo.vbs** for the console-free GUI, or run `python -B dashcam_qt.py`. The older CMD launcher can briefly show a command window.
-4. Connect Windows to the camera Wi-Fi yourself. The app does not change network interfaces, routes, firewall rules or credentials. Preserve any separate Internet connection and avoid camera traffic during important uploads.
+1. Install Python 3.10 or newer. Development checks used Python 3.14 and PySide6 6.11.0.
+2. Clone or download this repository, extract it into a writable folder if needed, and open PowerShell in the folder containing `README.md`, `requirements.txt` and `dashcam_qt.py`.
+3. Install the Qt frontend dependency with `python -m pip install -r requirements.txt`.
+4. Install FFmpeg and ffprobe using the instructions below.
+5. From the same PowerShell window, run `python -B dashcam_qt.py`. For later console-free launches, open **Launch DashGo.vbs**. The older **Launch Dashcam Transfer.cmd** also opens the Qt interface but can show a command window. The legacy Tkinter interface remains available explicitly as `dashcam_gui.py`.
+6. Connect Windows to the camera Wi-Fi yourself. The app does not change network interfaces, routes, firewall rules or credentials. Preserve any separate Internet connection and avoid camera traffic during important uploads.
 
-The VBS launcher uses `%LOCALAPPDATA%\Python\bin\pythonw.exe` when present, otherwise `pythonw.exe` on PATH. If Python opens the Microsoft Store, correct the installation/PATH or Windows app execution aliases.
+The dependency-install and launch commands must use the same Python installation. The VBS launcher uses `%LOCALAPPDATA%\Python\bin\pythonw.exe` when present, otherwise `pythonw.exe` on PATH; this can differ from the `python` in your terminal or virtual environment. If the VBS launcher cannot find PySide6, launch with the same `python` used for the dependency-install command so you can see any error. If Python opens the Microsoft Store, correct the installation/PATH or Windows app execution aliases.
+
+### Install FFmpeg and ffprobe
+
+Install a complete [FFmpeg build](https://ffmpeg.org/download.html). Both `ffmpeg.exe` and `ffprobe.exe` must be together in the same `bin` directory: the app finds FFmpeg first, then looks beside it for ffprobe. These tools are not installed or bundled by DashGo. Source validation used FFmpeg 9.0.
+
+Choose one method:
+
+- **WinGet:** run `winget install --id Gyan.FFmpeg --exact` in PowerShell and review the provider/source terms it presents. DashGo also detects the standard per-user Gyan WinGet installation.
+- **Manual:** follow the Windows build links on the [FFmpeg download page](https://ffmpeg.org/download.html), extract the complete build to a stable folder, and add its `bin` directory to your user PATH. Add an entry; do not replace your existing PATH.
+
+Close and reopen PowerShell and DashGo after installation or PATH changes. In the new PowerShell window, check:
+
+```powershell
+where.exe ffmpeg
+where.exe ffprobe
+ffmpeg -version
+ffprobe -version
+```
+
+Both tools should resolve to the same build's `bin` directory. If DashGo finds a standard WinGet installation but these shell commands do not, that installation may not yet be on your terminal's PATH. Use a complete build with H.264 encoding, AAC, RTSP and the video/audio filters used for rendering; a minimal build can be insufficient.
 
 ## Live, Transfer and Studio
 
@@ -75,6 +119,15 @@ Cleanup applies to the current selection, not a retrospective sweep of old orpha
 
 Logs are normally hidden under **Tools > Logs.** Runtime logs may contain local paths and device information; review before sharing.
 
+## Export transferred clips
+
+1. In **Transfer**, click **Transfer clips** and wait for the copy to finish. The two newest clips are skipped by default; adjust this only when you know those files are closed.
+2. In **Studio**, choose an **Output size target**, then open **Options > Studio settings**. Choose a folder of readable music you have permission to use, and set the title, route information and timing as needed. **Video encoder**, **End card seconds** and **New drive after gap (minutes)** apply to transferred drives.
+3. Select a **Transferred drive** row and click **Export Final**. Individual source files and existing output rows are not export selections. If an export with that drive's matching output name already exists, review the replacement prompt before proceeding.
+4. Follow progress in Studio, then select the output and use **Open folder**. Transferred-drive exports are stored in `Transfers/Drives/` by default. Source clips are retained.
+
+Transferred-drive rendering requires a usable music playlist. Silent raw-only export is supported for live capture sessions; it is not a music-free mode for transferred drives. If you only want the original camera files, the Transfer step already preserves them at their original resolution.
+
 ## Music, overlays and final export
 
 1. In **Studio**, set **Output size target** before capture.
@@ -96,6 +149,16 @@ Each export creates a new exclusive directory and fast-start MP4. Verification c
 Failed or canceled exports keep their sources and partial output. If cleanup cannot use the Recycle Bin, or a path/status/input changes, it stops and reports **cleanup incomplete** while keeping the good final MP4. Cancel during cleanup leaves the final MP4 and all remaining sources; already recycled items remain recoverable. Restore working media from the Recycle Bin before attempting a different export after cleanup. Never empty the Recycle Bin until you are satisfied with the final video.
 
 Export folders retain `finalize.json`, `cleanup.json`, FFmpeg errors and progress logs. Cleanup records the exact generated-file list and completed moves, excludes linked/reparse paths, checks inputs and final output again before each move, and never falls back to permanent deletion. An exclusive `.export.lock` prevents two exports from using one session at once. After an app/process crash, a leftover lock deliberately blocks reuse: confirm no job is running before removing that single lock file manually; do not remove media to clear it.
+
+## Troubleshooting
+
+- **The app does not open or PySide6 is missing:** open PowerShell in the source folder and run `python -B dashcam_qt.py` to see the error. Install `requirements.txt` using that same Python. See the VBS interpreter note under [Windows setup](#windows-setup).
+- **FFmpeg or ffprobe is missing:** keep both executables together, check their versions and PATH, then reopen the terminal and app. Downloading DashGo's source does not install them.
+- **No camera or blank preview:** check camera power and the Windows Wi-Fi connection, close competing viewers, then use **Options > Reconnect** in Live. Only the firmware listed under [Compatibility](#compatibility) has verified live activation. Reconnecting does not start capture.
+- **Music rendering does not start:** choose a folder with readable, permitted audio. An empty usable playlist prevents rendering. For live capture, enable **Background render with music** before starting; a five-minute segment must close before it can render.
+- **Export is queued or shows no completed renders yet:** let background rendering finish. The first segment may still be encoding. Keep the app open and do not choose **Stop background rendering** if you want the remaining segments rendered.
+- **Capture stops or export fails:** inspect **Tools > Logs** and keep the retained media. Wi-Fi, power, sleep and free space can interrupt a job. See [Storage and long captures](#storage-and-long-captures) and the export recovery/lock guidance above. Do not delete working files to clear an error.
+- **Folders are not writable:** use a writable source/media location and select writable capture/transfer folders in Options. Logs can contain local paths and device information; review them before sharing.
 
 ## Storage and long captures
 
@@ -167,7 +230,7 @@ $env:DASHGO_MEDIA_TESTS = '1'
 python -B -m unittest discover -s tests -v
 ```
 
-The offline suite passes **163 tests**, including opt-in generated-media integration. Coverage includes URL safeguards, capabilities, unique segments, simulated disk exhaustion/disconnect, shared preview/capture, lower-resolution raw export, source-hash preservation, rendering, final MP4 decoding/audio continuity, repeated exports, history, keep-awake ownership/overlap/release, both path layouts and capture recycling safety. Recycling tests use generated fixtures and cover cancellation, overlapping/multiple selections, active-job protection, path changes, links/junctions, partial failure and permanent-deletion veto. Export-lifecycle tests also cover generated-only cleanup, final-file protection, cleanup failure, running-encoder and verification-stage cancellation, input/status changes, export locks, progress, queued export, repeated actions and bounded reconnect simulations. Fixtures are generated locally; tests never connect to the physical camera. Associated-deletion fixtures additionally cover owned sidecars and folders, shared/unrecognized files, paired partials, history updates, multi-selection, changing contents/status, links, partial failure and repeat attempts. Qt interaction tests also cover stable drive selection, partial-render overwrite confirmation, final-file recycling/cancellation, atomic settings validation and final selection. Native Windows job-object tests verify cancellation and natural-exit cleanup of owned child processes without touching another command tree. GUI tests need an interactive Windows desktop and PySide6; legacy GUI regression tests also use Tkinter. Python 3.14 temporary-directory permissions can require a normal terminal outside a restricted sandbox.
+The last recorded source validation on **October 11, 2026**, at commit [`69ecb158`](https://github.com/VinnyMo/dashgo-desktop/commit/69ecb158fb98feb1996b7374ffe99216962617d8), passed **163 tests**, including opt-in generated-media integration. This is a recorded local result, not a current CI run. Coverage includes URL safeguards, capabilities, unique segments, simulated disk exhaustion/disconnect, shared preview/capture, lower-resolution raw export, source-hash preservation, rendering, final MP4 decoding/audio continuity, repeated exports, history, keep-awake ownership/overlap/release, both path layouts and capture recycling safety. Recycling tests use generated fixtures and cover cancellation, overlapping/multiple selections, active-job protection, path changes, links/junctions, partial failure and permanent-deletion veto. Export-lifecycle tests also cover generated-only cleanup, final-file protection, cleanup failure, running-encoder and verification-stage cancellation, input/status changes, export locks, progress, queued export, repeated actions and bounded reconnect simulations. Fixtures are generated locally; tests never connect to the physical camera. Associated-deletion fixtures additionally cover owned sidecars and folders, shared/unrecognized files, paired partials, history updates, multi-selection, changing contents/status, links, partial failure and repeat attempts. Qt interaction tests also cover stable drive selection, partial-render overwrite confirmation, final-file recycling/cancellation, atomic settings validation and final selection. Native Windows job-object tests verify cancellation and natural-exit cleanup of owned child processes without touching another command tree. GUI tests need an interactive Windows desktop and PySide6; legacy GUI regression tests also use Tkinter. Python 3.14 temporary-directory permissions can require a normal terminal outside a restricted sandbox.
 
 Separately completed validation:
 
