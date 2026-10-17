@@ -2,9 +2,7 @@
 from pathlib import Path
 root = Path(SPECPATH).parent
 common = dict(pathex=[str(root)], excludes=['tkinter'], noarchive=False)
-ffmpeg = root/'vendor/ffmpeg-9.0.2/ffmpeg-9.0.2-essentials_build/bin'
-gui = Analysis([str(root/'dashcam_qt.py')], datas=[(str(root/'assets/dashgo.ico'),'assets'),
-    (str(ffmpeg/'ffmpeg.exe'), 'ffmpeg/bin'), (str(ffmpeg/'ffprobe.exe'), 'ffmpeg/bin')], **common)
+gui = Analysis([str(root/'dashcam_qt.py')], datas=[(str(root/'assets/dashgo.ico'),'assets')], **common)
 # PyInstaller's broad Qt plugin hook pulls in unused PDF/virtual-keyboard/QML
 # libraries. Keep this Widgets application free of those optional components.
 unused = ('Qt6Pdf', 'Qt6VirtualKeyboard', 'Qt6Qml', 'Qt6Quick')

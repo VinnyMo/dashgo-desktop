@@ -17,14 +17,27 @@ class PortablePaths(unittest.TestCase):
     def test_source_uses_current_interpreter(self):
         self.assertEqual(python_executable(), sys.executable)
 
-    def test_frozen_media_tools_never_fall_back_to_host_path(self):
+    def test_frozen_media_tools_use_external_path(self):
+        with patch.object(sys, 'frozen', True, create=True), patch('dashcam_stitch.shutil.which', return_value='external/ffmpeg.exe'):
+            self.assertEqual(find_ffmpeg(None), 'external/ffmpeg.exe')
+
+    def test_explicit_ffmpeg_precedes_path(self):
+        with tempfile.TemporaryDirectory() as temp:
+            exe = Path(temp)/'ffmpeg.exe'
+            exe.touch()
+            with patch('dashcam_stitch.shutil.which', side_effect=AssertionError('unexpected PATH lookup')):
+                self.assertEqual(find_ffmpeg(exe), str(exe))
+
+    def test_missing_ffmpeg_explains_prerequisite(self):
+        with tempfile.TemporaryDirectory() as temp, patch('dashcam_stitch.shutil.which', return_value=None), patch('dashcam_stitch.Path.home', return_value=Path(temp)):
+            with self.assertRaisesRegex(RuntimeError, 'winget install --id Gyan.FFmpeg --exact'):
+                find_ffmpeg(None)
+
+    def test_winget_fallback(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            folder = root/'ffmpeg/bin'
+            folder = root/'AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_test/ffmpeg-test/bin'
             folder.mkdir(parents=True)
-            with patch.object(sys, 'frozen', True, create=True), patch('dashcam_stitch.__file__', str(root/'dashcam_stitch.py')), patch('dashcam_stitch.shutil.which', side_effect=AssertionError('host lookup')):
-                with self.assertRaisesRegex(RuntimeError, 'complete DashGo ZIP'):
-                    find_ffmpeg(None)
-                (folder/'ffmpeg.exe').touch()
-                (folder/'ffprobe.exe').touch()
+            (folder/'ffmpeg.exe').touch()
+            with patch('dashcam_stitch.shutil.which', return_value=None), patch('dashcam_stitch.Path.home', return_value=root):
                 self.assertEqual(find_ffmpeg(None), str(folder/'ffmpeg.exe'))

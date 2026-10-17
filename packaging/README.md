@@ -2,7 +2,7 @@
 
 Portable ZIP, Windows 10/11 x64. Extract the entire folder into a writable location and open DashGo.exe. Python and Qt are included. Keep _internal and DashGoWorker.exe beside it. ARM64 and 32-bit Windows are not supported by this build. Windows 11 x64 is the build/test host; a clean Windows 10 machine remains untested.
 
-FFmpeg and ffprobe 9.0.2 Essentials are bundled under _internal/ffmpeg/bin. No separate FFmpeg installation is needed; packaged execution does not fall back to PATH. FFmpeg provides capture, H.264/AAC encoding, decoding, resampling, music mixing and overlays. Music must be supplied by the user with appropriate rights. Arial is read from Windows, not redistributed.
+FFmpeg and ffprobe are external prerequisites installed by the user. See the main README for WinGet/manual installation, PATH verification and the tested 9.0.2 Essentials build. Packaged and source execution use PATH then the standard per-user Gyan.FFmpeg WinGet directory. FFmpeg provides capture, H.264/AAC encoding, decoding, resampling, music mixing and overlays. Music must be supplied by the user with appropriate rights. Arial is read from Windows, not redistributed.
 
 The portable app defaults to Data/Captures, Data/Transfers and Data/Music beside DashGo.exe. It does not migrate the existing Documents/Dashcam installation or preferences. Existing media can be selected explicitly. GUI settings still are not persisted. Before moving or removing a portable folder, preserve Data and any media stored there. There is no installer, registry registration, upgrade action or uninstaller; removal is manual. Do not extract over another version or your existing installation.
 
@@ -21,9 +21,9 @@ The build refuses a dirty tracked source tree. Pinning build dependencies and re
 
 ## Distribution review
 
-Read [LICENSING-REVIEW.md](LICENSING-REVIEW.md) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Version-specific source archives, notices and attribution records are now included in the local review deliverables. Exact vendor build/dependency source coverage and Microsoft runtime redistribution entitlement remain unresolved; this is not a license-cleared public release. No unfulfilled source offer is made.
+Read [LICENSING-REVIEW.md](LICENSING-REVIEW.md) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt). Version-specific source archives, notices and attribution records for bundled components accompany the review deliverables. The specific Qt/Shiboken Microsoft runtime downstream permission/terms question remains recorded in the licensing review. Python's binary license explicitly describes its redistribution conditions. No personal paid Visual Studio license is established as necessary. No unfulfilled source offer is made.
 
-The owner requested an all-in-one package. Gyan FFmpeg 9.0.2 Essentials (GPLv3, no enable-nonfree) preserves libx264/AAC and required filters. See FFMPEG-MANIFEST.json for binary/archive hashes and provenance. FFmpeg core source is supplied in the source-review ZIP, but exact statically linked dependency sources/build scripts must still be obtained before distribution. No paid codec license or signing was acquired.
+FFmpeg/ffprobe binaries, vendor distribution notices and source archives are excluded. The build does not fetch them. Users obtain a complete FFmpeg installation separately. No provider contact or paid license/signing was acquired.
 
 A free NSIS installer is technically possible; the portable ZIP was chosen to preserve the current installation and simplify media/uninstall safety. See the review for the tradeoff. Do not install this portable folder over the existing app.
 

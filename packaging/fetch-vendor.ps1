@@ -12,18 +12,10 @@ function Get-VerifiedArchive($url, $destination, $sha256) {
   throw "Unexpected cached archive: $destination"
  }
 }
-$vendor = Join-Path $repo 'vendor'
 $sources = Join-Path $repo 'vendor-sources'
-New-Item -ItemType Directory -Path $vendor,$sources -Force | Out-Null
-$ffmpeg = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'FFMPEG-MANIFEST.json') -Raw | ConvertFrom-Json
-$archive = Join-Path $vendor $ffmpeg.archive
-Get-VerifiedArchive $ffmpeg.url $archive $ffmpeg.sha256
-$expanded = Join-Path $vendor 'ffmpeg-9.0.2'
-if (!(Test-Path -LiteralPath $expanded)) {
- Expand-Archive -LiteralPath $archive -DestinationPath $expanded
-}
+New-Item -ItemType Directory -Path $sources -Force | Out-Null
 $sourceManifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'SOURCE-MANIFEST.json') -Raw | ConvertFrom-Json
 foreach($source in $sourceManifest) {
  Get-VerifiedArchive $source.url (Join-Path $sources $source.file) $source.sha256
 }
-Write-Output 'Pinned vendor binary and source archives verified. Licensing gates still apply.'
+Write-Output 'Pinned source archives verified. FFmpeg is an external user prerequisite.'

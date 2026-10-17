@@ -1,6 +1,6 @@
 # DashGo Desktop
 
-**Release Version 0.1** (tooling: `0.1.0`) is an unsigned Windows x64 **all-in-one portable review build**. Python, Qt, FFmpeg and ffprobe are included. No separate Python or FFmpeg installation is needed for the packaged app. The release is not public yet: [draft PR #1](https://github.com/VinnyMo/dashgo-desktop/pull/1), [draft release notes](packaging/RELEASE-NOTES.md), and [licensing review / publication gates](packaging/LICENSING-REVIEW.md).
+**Release Version 0.1** (tooling: `0.1.0`) is an unsigned Windows x64 **portable release candidate**. Python and Qt are included; **FFmpeg and ffprobe must be installed separately by the user**. The release is not public yet: [draft PR #1](https://github.com/VinnyMo/dashgo-desktop/pull/1), [draft release notes](packaging/RELEASE-NOTES.md), and [licensing review / publication gates](packaging/LICENSING-REVIEW.md).
 
 Windows desktop prototype for NEXPOW VSQ10 live preview, direct-to-PC capture, stored-clip transfers and video exports. Python with Qt Widgets (PySide6) and FFmpeg. Independent project, not affiliated with NEXPOW or DashGo.
 
@@ -25,11 +25,11 @@ Bitrate varies with scene and conditions. The app measures dimensions, codec, fr
 
 ## Packaged Windows app: start here
 
-Target: **Windows 10/11 x64**, with Windows 11 x64 locally tested. Windows ARM64, 32-bit Windows and a clean Windows 10 machine have not been validated. The bundled tools are CPython 3.14.4, PySide6/Qt 6.11.0 and Gyan FFmpeg/ffprobe 9.0.2 Essentials (GPLv3).
+Target: **Windows 10/11 x64**, with Windows 11 x64 locally tested. Windows ARM64, 32-bit Windows and a clean Windows 10 machine have not been validated. CPython 3.14.4 and PySide6/Qt 6.11.0 are bundled. External Gyan FFmpeg/ffprobe 9.0.2 Essentials is the tested media-tool build; other versions are not certified.
 
 1. Obtain the reviewed `DashGo-0.1.0-windows-x64.zip` from the owner. There is no public download asset yet; a future GitHub Release can host it with checksums and source materials.
 2. Verify the ZIP against its `SHA256SUMS.txt`, then **Extract All** into a new, writable folder. Do not run inside the ZIP or extract over your existing DashGo installation.
-3. Open **DashGo.exe**. Keep `DashGoWorker.exe`, `_internal`, and the license/notice files beside it. The blue camera icon identifies the running app. This build is unsigned: Windows SmartScreen or antivirus may warn about an unknown publisher. Confirm the source and checksum before choosing to run it; do not disable security protections globally.
+3. Install FFmpeg and ffprobe using the prerequisite instructions below, then open **DashGo.exe**. Keep `DashGoWorker.exe`, `_internal`, and the license/notice files beside it. The blue camera icon identifies the running app. This build is unsigned: Windows SmartScreen or antivirus may warn about an unknown publisher. Confirm the source and checksum before choosing to run it; do not disable security protections globally.
 4. Connect Windows to the camera Wi-Fi. DashGo discovers the supported camera and starts preview; it does not change Wi-Fi settings or start recording automatically. Use **Reconnect** if necessary.
 5. Media defaults to `Data/Captures`, `Data/Transfers`, and `Data/Music` beside the executable. Supply your own permitted music for rendered exports. Existing libraries can be selected through Options. The package does not migrate or change `Documents/Dashcam` or the old installed app.
 
@@ -37,9 +37,56 @@ Target: **Windows 10/11 x64**, with Windows 11 x64 locally tested. Windows ARM64
 
 To update, extract into a new folder and explicitly choose or move your media after closing all jobs. To remove this portable app, preserve `Data` and any other media first, then remove only its program folder. There is no automatic installer/uninstaller or migration. GUI preferences still do not persist between launches.
 
+### Required: install FFmpeg and ffprobe
+
+DashGo does not include or download these tools. Live preview, recording,
+media probing and rendered exports require them. The GUI can open without a
+camera or FFmpeg, but media operations will report the missing prerequisite.
+
+Choose one installation method:
+
+- **WinGet:** open PowerShell and run `winget install --id Gyan.FFmpeg --exact`.
+  Review the provider/source terms presented by WinGet. This installs Gyan's
+  complete build; DashGo also detects its standard per-user WinGet directory.
+- **Manual:** download the Windows x64 **release essentials ZIP** from
+  [Gyan's build page](https://www.gyan.dev/ffmpeg/builds/), linked by
+  [FFmpeg's official download page](https://ffmpeg.org/download.html).
+  Version **9.0.2 Essentials** was used for the release checks. Extract the
+  whole archive to a stable folder outside DashGo, for example
+  `C:\Tools\ffmpeg-9.0.2-essentials_build`. Keep `ffmpeg.exe` and `ffprobe.exe`
+  together in its `bin` folder. Add that full `bin` path to your **user PATH**
+  through Windows “Edit environment variables for your account” > Path > Edit
+  > New. Do not replace the existing PATH entries.
+
+Close and reopen PowerShell and DashGo after installation/PATH changes. Check:
+
+```powershell
+where.exe ffmpeg
+where.exe ffprobe
+ffmpeg -version
+ffprobe -version
+```
+
+Both commands should resolve to the same build's `bin` directory. If Windows
+Explorer has not picked up the changed PATH, sign out/in or launch DashGo from
+the new PowerShell window. A session-only alternative for a manual installation:
+
+```powershell
+$env:Path = 'C:\Tools\ffmpeg-9.0.2-essentials_build\bin;' + $env:Path
+& 'C:\path\to\DashGo-0.1.0-windows-x64\DashGo.exe'
+```
+
+GUI discovery checks PATH, then the standard per-user `Gyan.FFmpeg` WinGet
+package directory. The stitch CLI also accepts `--ffmpeg C:\path\to\ffmpeg.exe`;
+there is no separate saved GUI FFmpeg-path setting. Use a complete build with
+libx264, AAC, RTSP, drawtext and audio-mixing filters. The tested Gyan Essentials
+build has them; a minimal or LGPL-only build may omit required encoders.
+FFmpeg remains the user's separately obtained prerequisite under its own terms.
+
 ### Troubleshooting
 
-- **Missing FFmpeg / ffprobe or DLL:** extract the complete ZIP again into a new folder. The packaged app uses `_internal/ffmpeg/bin` and does not fall back to a developer's PATH. Do not substitute random DLLs from the Internet.
+- **Missing FFmpeg / ffprobe:** follow the prerequisite instructions above; ensure both tools are together and restart DashGo after PATH changes. Re-extracting DashGo does not install FFmpeg.
+- **Missing Python/Qt DLL:** extract the complete DashGo ZIP into a new folder. Do not substitute random DLLs from the Internet.
 - **No camera / blank preview:** check the camera's power and Wi-Fi connection, close competing viewers, then use Reconnect. Preview recovery never starts recording.
 - **No music render:** select a folder containing readable, permitted music; empty or unreadable libraries prevent rendering. Let rendering finish before final export.
 - **No write access:** move the portable folder to a writable location, or select writable capture/transfer folders. Do not run from Program Files, a ZIP viewer, or read-only media.
@@ -49,7 +96,7 @@ To update, extract into a new folder and explicitly choose or move your media af
 ## Developer setup (source checkout only)
 
 1. Install Python 3.10 or newer. Development checks used Python 3.14 and PySide6 6.11.0. Install the Qt frontend dependency with `python -m pip install -r requirements.txt`. The legacy Tkinter interface remains available explicitly as `dashcam_gui.py`.
-2. Install a complete [FFmpeg build](https://ffmpeg.org/download.html), including `ffmpeg.exe` and `ffprobe.exe`, and add its `bin` directory to PATH. The app also detects Gyan's WinGet installation. Earlier source tests used FFmpeg 9.0. Source checkout setup requires this separate installation; the Release 0.1 portable package includes FFmpeg 9.0.2.
+2. Install a complete [FFmpeg build](https://ffmpeg.org/download.html), including `ffmpeg.exe` and `ffprobe.exe`, and add its `bin` directory to PATH. The app also detects Gyan's WinGet installation. Both source and packaged apps require this separate installation; see the exact prerequisite instructions above.
 3. Clone/download this source into a writable folder. Open **Launch DashGo.vbs** for the console-free GUI, or run `python -B dashcam_qt.py`. The older CMD launcher can briefly show a command window.
 4. Connect Windows to the camera Wi-Fi yourself. The app does not change network interfaces, routes, firewall rules or credentials. Preserve any separate Internet connection and avoid camera traffic during important uploads.
 
@@ -220,8 +267,8 @@ Only source, generic examples and synthetic test definitions belong in this repo
 
 Camera HTTP is unencrypted on its local Wi-Fi. Do not expose it to the Internet. Live URLs cannot embed credentials, but queries and logs may still contain sensitive information. The app has no telemetry and does not upload footage.
 
-[MIT](LICENSE), copyright 2026 Vincent Mossman, applies to DashGo source and the camera icon. Bundled dependencies retain their own licenses: Qt/PySide/Shiboken under the applicable LGPLv3 terms and third-party terms, CPython under its PSF/history licenses, FFmpeg 9.0.2 Essentials under GPLv3, and the PyInstaller bootloader under its GPL exception. Microsoft runtime and Mesa/LLVM components are also included. Music and Windows fonts are not redistributed.
+[MIT](LICENSE), copyright 2026 Vincent Mossman, applies to DashGo source and the camera icon. Bundled dependencies retain their own licenses: Qt/PySide/Shiboken under the applicable LGPLv3 terms and third-party terms, CPython under its PSF/history licenses, and the PyInstaller bootloader under its GPL exception. Microsoft runtime and Mesa/LLVM components are also included. Music and Windows fonts are not redistributed.
 
-Read [third-party notices](packaging/THIRD-PARTY-NOTICES.txt), the included license files, and the [licensing/source review](packaging/LICENSING-REVIEW.md). Source archives and build provenance are prepared locally for review. The remaining exact-source/dependency and Microsoft redistribution questions block public distribution; this is not a compliance certification or a fulfilled written source offer. No public release or merge is authorized by these instructions.
+Read [third-party notices](packaging/THIRD-PARTY-NOTICES.txt), the included license files, and the [licensing/source review](packaging/LICENSING-REVIEW.md). Source archives and build provenance are prepared locally for review. The remaining specific Qt/Shiboken Microsoft-runtime permission/terms question and clean-Windows/owner checks are recorded there. FFmpeg binaries, their source archives and their distribution notices are not part of this package.
 
-Qt DLLs remain external and replaceable. Users may modify/relink the LGPL libraries and debug those modifications; no DashGo license term prohibits that. The source and build recipe permit rebuilding the application. FFmpeg is executed as a separate subprocess; its GPL license is not relabeled as MIT. Distribution/source obligations and codec patent questions still require review before shipping.
+Qt DLLs remain external and replaceable. Users may modify/relink the LGPL libraries and debug those modifications; no DashGo license term prohibits that. The source and build recipe permit rebuilding the application. Externally installed FFmpeg is executed as a separate subprocess and retains its own license. No FFmpeg distribution or provider contact is performed by this release.

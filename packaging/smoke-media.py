@@ -18,7 +18,8 @@ for key in ('USERPROFILE', 'APPDATA', 'LOCALAPPDATA'):
     location = fixture/key
     location.mkdir()
     env[key] = str(location)
-ffmpeg = package/'_internal/ffmpeg/bin/ffmpeg.exe'
+ffmpeg = Path(sys.argv[2]).resolve()
+env['PATH'] = str(ffmpeg.parent) + os.pathsep + env['PATH']
 ffprobe = ffmpeg.with_name('ffprobe.exe')
 worker = package/'DashGoWorker.exe'
 source = fixture/'transfers'
@@ -40,7 +41,7 @@ run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=25'
 run([ffmpeg, '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000',
      '-t', '6', music/'synthetic.wav'])
 before = hashlib.file_digest(clip.open('rb'), 'sha256').hexdigest()
-# No --ffmpeg argument: exercises packaged default discovery with no host fallback.
+# No --ffmpeg argument: exercises packaged discovery of the external prerequisite via PATH.
 report = run([worker, '-u', '-B', 'dashcam_worker.py', worker, '-u', '-B',
               'dashcam_stitch.py', '--source', source, '--music-dir', music,
               '--output', output, '--stitch', '--video-encoder', 'libx264',
@@ -51,6 +52,6 @@ streams = json.loads(run([ffprobe, '-v', 'error', '-show_streams', '-of', 'json'
 assert {'h264', 'aac'} <= {stream['codec_name'] for stream in streams}
 run([ffmpeg, '-v', 'error', '-xerror', '-i', videos[0], '-f', 'null', '-'])
 assert before == hashlib.file_digest(clip.open('rb'), 'sha256').hexdigest()
-print('PASS: bundled FFmpeg/ffprobe, gated worker, music/overlay H.264/AAC export, full short decode, source retained')
-print('Windows-only PATH and isolated profile environment; not a clean-machine test.')
+print('PASS: external FFmpeg/ffprobe via PATH, gated worker, music/overlay H.264/AAC export, full short decode, source retained')
+print('External tool directory plus Windows-only PATH and isolated profile environment; not a clean-machine test.')
 print(f'Disposable synthetic fixtures retained: {fixture}')

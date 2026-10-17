@@ -15,11 +15,6 @@ for item in source_manifest:
     source = ROOT/'vendor-sources'/item['file']
     if hashlib.file_digest(source.open('rb'), 'sha256').hexdigest() != item['sha256']:
         raise SystemExit(f'Unexpected source archive: {source}')
-ff_manifest = json.loads((ROOT/'packaging/FFMPEG-MANIFEST.json').read_text(encoding='utf-8'))
-ffroot = ROOT/'vendor/ffmpeg-9.0.2/ffmpeg-9.0.2-essentials_build/bin'
-for name, digest in ff_manifest['binaries'].items():
-    if hashlib.file_digest((ffroot/name).open('rb'), 'sha256').hexdigest() != digest:
-        raise SystemExit(f'Unexpected FFmpeg binary: {name}; fetch the pinned vendor archive.')
 data = ROOT/'dist/DashGo-0.1.0-windows-x64/Data'
 if data.exists() and any(data.iterdir()):
     raise SystemExit('Preserve the existing portable Data folder before rebuilding; refusing to overwrite it.')
@@ -33,10 +28,12 @@ build_env['PATH'] = os.pathsep.join([str(Path(sys.executable).parent),
 subprocess.run([sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', 'packaging/dashgo.spec'],
                check=True, cwd=ROOT, env=build_env)
 package = ROOT/'dist/DashGo-0.1.0-windows-x64'
+if any(p.name.lower() in ('ffmpeg.exe', 'ffprobe.exe') for p in package.rglob('*')):
+    raise SystemExit('External-prerequisite package must not contain FFmpeg executables.')
 licenses = package/'licenses'
 licenses.mkdir(exist_ok=True)
 shutil.copytree(ROOT/'packaging/licenses', licenses/'upstream-notices', dirs_exist_ok=True)
-for name in ('THIRD-PARTY-NOTICES.txt', 'LICENSING-REVIEW.md', 'SOURCE-MANIFEST.json', 'FFMPEG-MANIFEST.json', 'QT-ATTRIBUTIONS.json'):
+for name in ('THIRD-PARTY-NOTICES.txt', 'LICENSING-REVIEW.md', 'SOURCE-MANIFEST.json', 'QT-ATTRIBUTIONS.json', 'PROVENANCE-FOLLOWUP.md', 'MICROSOFT-RUNTIME-INVENTORY.json', 'WHEEL-PROVENANCE.json'):
     shutil.copy2(ROOT/'packaging'/name, package/name)
 for name in ('LICENSE', 'README.md'):
     shutil.copy2(ROOT/name, package/name)
@@ -53,7 +50,7 @@ for name in ('PySide6', 'PySide6_Essentials', 'shiboken6', 'pyinstaller'):
             shutil.copy2(dist.locate_file(item), dest/Path(item).name)
 for name in ('LGPL-3.0.txt', 'GPL-3.0.txt'):
     shutil.copy2(ROOT/'packaging/licenses'/name, licenses/name)
-(package/'BUILD-INFO.json').write_text(json.dumps({'version':'0.1.0','display_version':'Release Version 0.1','commit':commit,'python':sys.version,'architecture':'AMD64','signed':False,'distribution_status':'PRIVATE REVIEW - licensing audit incomplete'},indent=2),encoding='utf-8')
+(package/'BUILD-INFO.json').write_text(json.dumps({'version':'0.1.0','display_version':'Release Version 0.1','commit':commit,'python':sys.version,'architecture':'AMD64','signed':False,'distribution_status':'RELEASE CANDIDATE - owner review pending','ffmpeg':'external prerequisite; not bundled'},indent=2),encoding='utf-8')
 inventory = {str(p.relative_to(package)): hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()
              for p in sorted(package.rglob('*')) if p.is_file() and p.suffix.lower() in ('.dll', '.exe', '.pyd')}
 (package/'BINARY-INVENTORY.json').write_text(json.dumps(inventory,indent=2),encoding='utf-8')
@@ -69,7 +66,7 @@ with zipfile.ZipFile(source_zip, 'w', zipfile.ZIP_STORED) as out:
     out.writestr('dashgo-source.tar', application_source)
     for item in source_manifest:
         out.write(ROOT/'vendor-sources'/item['file'], 'upstream/'+item['file'])
-    for name in ('SOURCE-MANIFEST.json', 'FFMPEG-MANIFEST.json', 'LICENSING-REVIEW.md'):
+    for name in ('SOURCE-MANIFEST.json', 'LICENSING-REVIEW.md'):
         out.write(ROOT/'packaging'/name, name)
 source_digest = hashlib.file_digest(source_zip.open('rb'), 'sha256').hexdigest()
 (ROOT/'dist/SHA256SUMS.txt').write_text(f'{digest}  {archive.name}\n{source_digest}  {source_zip.name}\n',encoding='ascii')

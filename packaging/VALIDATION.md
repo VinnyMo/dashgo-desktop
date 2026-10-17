@@ -1,5 +1,9 @@
 # Release 0.1 local validation
 
+Current candidate: external user-installed FFmpeg/ffprobe. The historical
+all-in-one checks below do not describe the current package contents.
+Targeted prerequisite/startup/render checks are recorded in the final handoff.
+
 Host: VANLIFE, Windows 11 Pro 10.0.26300 x64. No camera was connected by the
 checks, and the original installed app/media were not changed.
 
@@ -30,7 +34,7 @@ format does not register an app or migrate/remove data; its builder refuses to
 overwrite nonempty portable Data.
 
 Run `packaging/smoke-windows.ps1 -Package <fresh extracted folder>` and
-`python packaging/smoke-media.py <fresh extracted folder>` for the focused
+`python packaging/smoke-media.py <fresh extracted folder> <external ffmpeg.exe>` for the focused
 checks. Synthetic fixtures and profile directories are retained in TEMP for
 inspection. Exact final artifact commit/hashes are in BUILD-INFO.json,
 BINARY-INVENTORY.json and SHA256SUMS.txt; do not infer them from this document.

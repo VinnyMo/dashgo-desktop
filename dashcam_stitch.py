@@ -44,11 +44,6 @@ def find_ffmpeg(explicit: Path | None) -> str:
         if not explicit.is_file():
             raise RuntimeError(f"FFmpeg not found: {explicit}")
         return str(explicit)
-    if getattr(sys, 'frozen', False):
-        bundled = Path(__file__).resolve().parent / 'ffmpeg' / 'bin' / 'ffmpeg.exe'
-        if not bundled.is_file() or not bundled.with_name('ffprobe.exe').is_file():
-            raise RuntimeError('Bundled FFmpeg tools are missing. Extract the complete DashGo ZIP again.')
-        return str(bundled)
     found = shutil.which("ffmpeg")
     if found:
         return found

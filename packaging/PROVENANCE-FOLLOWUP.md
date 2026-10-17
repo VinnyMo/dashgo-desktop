@@ -1,8 +1,8 @@
 # Release 0.1 provenance follow-up — 2026-10-17
 
-This is an audit supplement to the unchanged owner-review package built from
-`f1f52d59d092c200a2f5eeac247f2efebc4d15f5`. It is not a new binary build or a
-claim that the source-review ZIP is complete Corresponding Source.
+The current candidate uses external user-installed FFmpeg/ffprobe. Its build
+commit is recorded in BUILD-INFO.json. The prior all-in-one package is superseded.
+The evidence below concerns unchanged bundled Qt/Python dependencies.
 
 ## Verified Qt and runtime provenance
 
@@ -55,71 +55,11 @@ license violation or require a new paid agreement. Owner decision is whether
 to obtain upstream confirmation/legal review of that existing route before
 public distribution. No agreement was accepted here.
 
-## FFmpeg: exact documentation gap
+## External media prerequisite
 
-The provider's public repository is a support/release mirror, not the build
-recipe. The 9.0.2 binary's README supplies the revisions below; the existing
-source-review ZIP contains FFmpeg core source, **not these dependency sources**.
-The matching provider build scripts, patches, transitive dependency manifest
-and source bundle were not found among the published records inspected.
-
-| Dependency | Provider's exact recorded version/revision |
-| --- | --- |
-| AMF | v1.5.2-2-gc35f613 |
-| aom | v3.15.0-25-g023743a7d7 |
-| AviSynthPlus | v3.7.5-383-g5c82777b |
-| cairo | 1.18.5 (exact commit unresolved) |
-| ffnvcodec | n13.1.15.0-1-geddcea9 |
-| freetype | VER-2-14-3 |
-| fribidi | v1.0.16-19-gc928e4c |
-| gsm | 1.0.24 |
-| harfbuzz | 14.4.0-108-g64e2b532 |
-| lame | 3.100 |
-| libass | 0.17.5-8-gb2fe9d8 |
-| libgme | 0.6.6 (exact commit unresolved) |
-| opencore-amrnb / amrwb | 0.1.6 |
-| libssh | 0.12.2 |
-| libtheora | v1.2.0 |
-| libwebp | v1.6.0-249-g1f34635 |
-| openal-soft | 1.25.2-48-g7532541 |
-| openjpeg2 | 2.5.4 |
-| openmpt | libopenmpt-0.6.30-3-g6c0a06bc |
-| opus | v1.6.1-68-g503d81b1 |
-| rubberband | v4.0.0 |
-| SDL | release-2.32.0-234-gb90ac9502 |
-| speex | Speex-1.2.1-51-g0589522 |
-| srt | v1.5.7-7-gcae8f62 |
-| VAAPI | 2.25.0. (confirm libva tag) |
-| vidstab | v1.1.2-214-ge2445c4 |
-| vmaf | v3.2.0-13-gf85a8536 |
-| vo-amrwbenc | 0.1.3 |
-| vorbis | v1.3.7-37-g1b75110b |
-| VPL | 2.17 |
-| vpx | v1.17.0-57-gd2413e2ca |
-| x264 | v0.165.3223 (confirm source commit) |
-| x265 | 4.3-45-g116b875 |
-| xvid | v1.3.7 |
-| zeromq | 4.3.5 |
-| zimg | release-3.0.6-253-g67e0603 |
-
-Configured libraries without exact versions in that list: fontconfig, iconv,
-GnuTLS, libxml2, GMP, bzip2, XZ/liblzma and zlib. Obtain the transitive manifest
-too (including any nettle, pixman, libpng, ogg and MinGW/GCC runtime components
-actually linked); do not borrow versions inferred for another release.
-Build requirements include the gcc16.2.0/MSYS2 package revisions, dependency
-configure options, local patches and the scripts controlling compilation.
-
-A directly relevant [provider issue #246](https://github.com/GyanD/codexffmpeg/issues/246)
-asks for the same missing material for an earlier build. On 2026-10-13 the
-maintainer [requested contact from an official email address](https://github.com/GyanD/codexffmpeg/issues/246#issuecomment-6141911951).
-This supplies a concrete next step, not evidence that the requested material
-is already public. No email or issue was sent on the owner's behalf.
-
-Owner action: authorize a source-manifest request identifying **9.0.2 Essentials**
-and executable hashes in FFMPEG-MANIFEST.json, or choose a separately documented
-source build. Merely collecting generic release tarballs cannot establish
-matching patches/transitive inputs. This is missing documentation, distinct
-from the remaining codec patent/combined-work legal interpretation.
+FFmpeg and ffprobe are not distributed. Their source/build collection and
+provider-contact work are stopped. README.md documents user setup and the
+9.0.2 Essentials build used for external-tool checks.
 
 ## Clean Windows validation
 
@@ -129,18 +69,20 @@ queried VirtualBox/VMware installation records were absent. Running vmcompute
 alone does not establish a Windows VM. Nothing was installed/enabled/booted.
 
 For an owner-provided disposable Windows 10/11 x64 environment: use a standard
-user with no Python, Qt or FFmpeg installed; copy and verify the current ZIP
+user with no Python or Qt installed; first test without FFmpeg, then install the documented external prerequisite; copy and verify the current ZIP
 against SHA256SUMS; extract to a writable path containing spaces; run the
 packaged smoke-windows.ps1 and smoke-media.py using a separate test harness
 where needed; visually inspect camera/taskbar identity; launch without camera;
-verify bundled ffmpeg/ffprobe are the executed tools and a short synthetic
+verify the documented external ffmpeg/ffprobe are the executed tools and a short synthetic
 H.264/AAC export decodes; close and reopen to check preferences; delete only
 the disposable program folder after preserving its Data folder and prove an
 outside sentinel/media folder remains unchanged. There is no installer or
 uninstaller in this release candidate, so no installer safety claim is made.
 
-Already-passed owner-machine smoke tests were not repeated: no packaged code
-or binaries changed in this audit. Remaining public-release gates are the
-FFmpeg source/build packet, Microsoft pass-through confirmation/terms, clean
-Windows check, and owner approval. Qt modified-library replacement remains
-a useful focused validation, not evidence of a currently failed test.
+The switch to an external prerequisite requires a targeted package rebuild,
+missing-prerequisite check, startup check and short external-tool render check.
+Results are recorded in VALIDATION.md. No lengthy captures or full suite rerun.
+Remaining publication gates: Qt/Shiboken Microsoft-runtime permission/terms,
+clean Windows validation and owner visual/package approval. FFmpeg source
+collection is no longer a gate. Modified-Qt replacement remains a useful
+focused validation, not evidence of a currently failed test.
