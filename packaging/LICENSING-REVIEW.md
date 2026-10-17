@@ -4,6 +4,14 @@ Engineering review dated 2026-10-17. This records evidence and unresolved
 rights/provenance questions; it is not legal certification. The all-in-one
 binary is usable for owner review but is **not ready for public distribution**.
 
+## Follow-up supersedes unresolved provenance wording
+
+See [PROVENANCE-FOLLOWUP.md](PROVENANCE-FOLLOWUP.md) for verified official wheel
+file hashes, matched Mesa PE sections, all ten signed Microsoft DLLs, the
+downstream distribution clause, and an exact FFmpeg missing-material list.
+The earlier table below records the initial review; the follow-up narrows its
+open questions. A personal Visual Studio purchase is not established as needed.
+
 ## Actual components and evidence
 
 | Component | Evidence / action | Remaining issue |
