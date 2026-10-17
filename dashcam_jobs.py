@@ -5,6 +5,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+from dashcam_paths import python_executable
 import threading
 
 
@@ -72,7 +73,7 @@ class OwnedCommand:
                 self._job = _WindowsJob()
             options = {'creationflags': subprocess.CREATE_NO_WINDOW} if os.name == 'nt' else {'start_new_session': True}
             self.process = subprocess.Popen(
-                [sys.executable, '-u', '-B', str(Path(__file__).with_name('dashcam_worker.py')), *map(str, command)],
+                [python_executable(), '-u', '-B', str(Path(__file__).with_name('dashcam_worker.py')), *map(str, command)],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding='utf-8', errors='replace', **options)
             if self._job:

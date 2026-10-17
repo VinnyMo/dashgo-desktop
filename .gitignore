@@ -42,3 +42,5 @@ dist/
 *.spec
 *.exe
 *.zip
+
+!packaging/dashgo.spec

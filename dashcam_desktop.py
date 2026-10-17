@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 import sys
+from dashcam_paths import python_executable
 from pathlib import Path
 
 import dashcam_process as subprocess
@@ -241,7 +242,7 @@ class Desktop:
         if self.operation=='studio':self.cancel_command()
 
     def transfer(self, *, scan=False):
-        command=[sys.executable,'-u','-B',str(APP_DIR/'dashcam_downloader.py'),'--output',str(self.transfer_dir),
+        command=[python_executable(),'-u','-B',str(APP_DIR/'dashcam_downloader.py'),'--output',str(self.transfer_dir),
                  '--history',str(self.transfer_dir/'.dashcam_history.sqlite3'),'--skip-newest',str(self.skip_newest),
                  '--quiet-list' if scan else '--download']
         if self.camera:command+=['--camera',self.camera]
@@ -253,7 +254,7 @@ class Desktop:
         if not self.channel_title.strip() or self.crossfade<=0 or self.end_card<=0:raise ValueError('Check title and presentation timing in Studio settings.')
         commands=[]
         for drive in drives:
-            commands.append([sys.executable,'-u','-B',str(APP_DIR/'dashcam_stitch.py'),'--source',str(self.transfer_dir),
+            commands.append([python_executable(),'-u','-B',str(APP_DIR/'dashcam_stitch.py'),'--source',str(self.transfer_dir),
                 '--output',str(self.transfer_dir/'Drives'),'--gap-minutes',str(self.gap_minutes),
                 '--drive-start',drive[0].started.strftime('%Y-%m-%d_%H-%M-%S'),'--music-dir',str(self.music_dir),
                 '--crossfade-seconds',str(self.crossfade),'--channel-title',self.channel_title,'--route-info',self.route_info,

@@ -1,5 +1,7 @@
 # DashGo Desktop
 
+Release Version 0.1 (tooling: 0.1.0) is prepared as an unsigned, private-review Windows x64 portable build. See [packaging instructions and distribution gates](packaging/README.md) and [draft release notes](packaging/RELEASE-NOTES.md).
+
 Windows desktop prototype for NEXPOW VSQ10 live preview, direct-to-PC capture, stored-clip transfers and video exports. Python with Qt Widgets (PySide6) and FFmpeg. Independent project, not affiliated with NEXPOW or DashGo.
 
 **Prototype:** two separate 18-minute camera capture/render/export runs passed. The owner also reports successful longer videos when the connection stays available, without a specified duration. Continuous eight-hour and moving-drive reliability remain unverified. Camera settings are read-only. There is no installer, packaged release or full iOS feature parity.

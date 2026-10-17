@@ -16,7 +16,7 @@ except ImportError:
     raise
 
 from PySide6.QtCore import Qt, QTimer, QSize, QUrl
-from PySide6.QtGui import QImage, QPainter, QColor, QDesktopServices, QAction, QKeySequence
+from PySide6.QtGui import QIcon, QImage, QPainter, QColor, QDesktopServices, QAction, QKeySequence
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QToolButton, QMenu, QTabWidget, QComboBox, QCheckBox, QProgressBar,
     QTreeWidget, QTreeWidgetItem, QHeaderView, QAbstractItemView, QDialog, QDialogButtonBox,
@@ -102,7 +102,7 @@ class Window(QMainWindow):
     def __init__(self,desktop=None):
         super().__init__()
         self.desktop=desktop or Desktop(auto_connect=os.environ.get('DASHGO_NO_AUTO_CONNECT')!='1')
-        self.setWindowTitle('DashGo Desktop');self.resize(1120,820);self.setMinimumSize(960,700)
+        self.setWindowTitle('DashGo Desktop - Release Version 0.1');self.setWindowIcon(QIcon(str(Path(__file__).with_name('assets')/'dashgo.ico')));self.resize(1120,820);self.setMinimumSize(960,700)
         self.setStyleSheet(STYLE);self.keep_awake=KeepAwake();self._closing=False
         self._log_count=0;self._last_tick=time.monotonic();self._last_notice='';self._selected_export=None
         shell=QWidget();self.setCentralWidget(shell);outer=QVBoxLayout(shell);outer.setContentsMargins(26,20,26,16);outer.setSpacing(15)
@@ -456,7 +456,10 @@ class Window(QMainWindow):
 
 
 def main():
-    app=QApplication(sys.argv);app.setStyle('Fusion');app.setPalette(app.style().standardPalette());app.setApplicationName('DashGo Desktop')
+    if os.name == 'nt':
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID('VinnyMo.DashGo.Desktop')
+    app=QApplication(sys.argv);app.setStyle('Fusion');app.setPalette(app.style().standardPalette());app.setApplicationName('DashGo Desktop');app.setApplicationVersion('0.1.0');app.setWindowIcon(QIcon(str(Path(__file__).with_name('assets')/'dashgo.ico')))
     window=Window();window.show();return app.exec()
 
 
