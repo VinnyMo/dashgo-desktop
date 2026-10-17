@@ -1,0 +1,87 @@
+Research handoff — 2026-10-17. NO MESSAGE SENT.
+
+Verified recipient: Gyan Doshi, builds@gyan.dev.
+Source: https://www.gyan.dev/ffmpeg/builds/#notes says build queries go to
+"builds" at that domain. This is the build-query address, not the separate
+consulting address. Provider issue #246 asks for an official-email request:
+https://github.com/GyanD/codexffmpeg/issues/246#issuecomment-6141911951
+
+Suggested subject: Corresponding source/build manifest for FFmpeg 9.0.2 Essentials
+
+Minimal facts and request for the parent to turn into a draft:
+- Preparing DashGo Desktop 0.1.0 Windows x64; not yet publicly released.
+- Using ffmpeg-9.0.2-essentials_build.zip, release dated 2026-09-19,
+  static GPLv3, gcc16.2.0/MSYS2 UCRT64.
+- Core commit 946fcce07b6dcd0331c8cc609192aeff5e1924f8.
+- Archive SHA256 60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba.
+- ffmpeg.exe SHA256 3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec.
+- ffprobe.exe SHA256 f0d36ecbbdd3bcfac3efa078c96c7271c2e68b3810595552ac3b7f17e9a65c52.
+- Request an existing matching Corresponding Source bundle, or exact source
+  revisions/archives for direct and transitive linked dependencies plus local
+  patches, build scripts/configuration and toolchain package versions.
+- Ask specifically for revisions omitted/ambiguous in README: fontconfig,
+  iconv, GnuTLS, libxml2, GMP, bzip2, XZ/liblzma, zlib, cairo1.18.5,
+  libgme0.6.6, VAAPI2.25.0 and x264v0.165.3223; include any linked transitive
+  dependencies and their licenses/notices. Existing README revisions need not
+  be repeated in the email; a complete existing manifest would suffice.
+- Ask for existing published material, not a custom paid build or service.
+- Sender identity/address must be the owner's approved account; pending consent.
+
+Microsoft follow-up — correction and concrete boundary:
+The actual bundled licenses/CPython-LICENSE.txt AND the official Python3.14.4
+embedding ZIP's LICENSE.txt contain "Additional Conditions for this Windows
+binary build". This explicitly addresses onward distribution of Microsoft
+Distributable Code, requires protective downstream terms, and says Python
+binary redistribution complies subject to listed restrictions (preserve
+notices; no misleading Microsoft branding; Microsoft platforms; no malicious,
+deceptive or unlawful programs). Thus the earlier blanket statement that the
+Python license contained no pass-through wording was incorrect and is corrected.
+Python's version-specific documentation expressly supports putting the embedded
+distribution in another application's install package:
+https://github.com/python/cpython/blob/v3.14.4/Doc/using/windows.rst
+
+Supported conclusion: Python provides a documented redistribution route;
+no personal Visual Studio purchase is established as necessary. Retain and
+honor its Microsoft-specific terms. The wording initially describes code
+embedded by the linker, so do not silently extend it to unrelated Qt runtimes.
+
+For the 8 Qt/Shiboken runtime copies (14.44.35211.0), official wheel metadata
+identifies LGPL/GPL alternatives for bindings; its only packaged license file
+is LicenseRef-Qt-Commercial.txt and contains no Microsoft downstream grant.
+Generic Qt LGPL licensing cannot by itself relicense Microsoft's DLLs.
+Qt6.11 deployment guidance both recommends the official redistributable and
+warns against fallback developer-machine DLLs, yet elsewhere lists compiler
+DLLs inside a deployment archive. Our DLLs match official wheels, not arbitrary
+developer-machine files. The guide alone does not resolve permission for those
+wheel-supplied files:
+https://doc.qt.io/qt-6.11/windows-deployment.html
+Microsoft permits app-local redistributable DLL deployment subject to terms:
+https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
+The Visual Studio terms permit licensees to authorize downstream distributors:
+https://visualstudio.microsoft.com/license-terms/vs2022-ga-community/
+
+Specific missing item: Qt's confirmation/terms authorizing downstream shipment
+of the Microsoft runtime DLLs contained in PySide6/Shiboken6 6.11.0 Windows
+wheels, including whether application-local copying is covered and which
+protective end-user terms to carry. This can be obtained from Qt or resolved by
+qualified review of the existing upstream grant. No contact authorized/sent.
+Merely switching to vc_redist.x64.exe is not an automatic licensing cure and
+would change deployment behavior; installing/buying VS is not proposed.
+
+Alternative FFmpeg option inspected:
+https://github.com/BtbN/FFmpeg-Builds publishes dependency recipes, patches,
+build scripts and Windows x64 GPL release-branch binaries (including 9.0).
+Its LGPL variant omits x264, so it is not a behavior-preserving substitution.
+This is a credible route to avoid a private provider request, but not a
+pre-cleared drop-in: the inspected release assets have binaries/checksums,
+not a complete dependency source bundle; latest and container image tags move.
+Before selecting it, pin the dated binary/repository commit, recover exact
+dependency source revisions and container digests, collect sources/notices,
+then verify required capture/overlay/music codecs and filters. Alternatively
+build a pinned minimal GPL configuration locally with retained inputs/scripts.
+No hosted CI, Docker setup, binary replacement or rebuild was performed.
+
+Current preferred path: request the matching Gyan material after consent,
+preserving the already tested executable. BtbN or a local documented build is
+the fallback if that material cannot be obtained. Clean-Windows and owner
+visual approval remain separate validation gates.

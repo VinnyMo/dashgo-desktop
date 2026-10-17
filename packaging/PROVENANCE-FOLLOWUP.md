@@ -46,8 +46,11 @@ grant installation/use and are not by themselves a general redistribution grant.
 Remaining legal interpretation: confirm that Python/Qt's upstream distribution
 permission covers repackaging these unmodified runtimes with their libraries
 inside DashGo, and identify the end-user notice/terms required for that route.
-No upstream-specific affirmative pass-through statement was located in the
-collected wheel licenses or Python license. Do not call this an established
+Correction from the subsequent binary-license inspection: the bundled
+CPython-LICENSE.txt contains Additional Conditions for this Windows binary
+build, explicitly addressing redistribution and Microsoft-code protections.
+This supports Python redistribution subject to those conditions; no equivalent
+Microsoft-specific statement was found in the Qt/Shiboken wheel license files. Do not call this an established
 license violation or require a new paid agreement. Owner decision is whether
 to obtain upstream confirmation/legal review of that existing route before
 public distribution. No agreement was accepted here.
